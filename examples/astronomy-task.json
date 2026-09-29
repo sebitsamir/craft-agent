@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "title": "Visualize an orbital transfer",
+  "domain": "astronomy",
+  "intent": "Explain and visualize a simplified orbital transfer with stated assumptions and units.",
+  "impact": "moderate",
+  "outputs": [
+    { "kind": "calculation", "format": "json", "description": "Parameters, formulas, units, and results." },
+    { "kind": "visualization", "format": "svg", "description": "Labeled orbit diagram tied to the calculation." }
+  ],
+  "acceptance": [
+    { "id": "units", "statement": "Every quantity has a defined unit and the equations are dimensionally consistent.", "evidence": { "method": "calculation", "description": "Independent unit and numerical checks." } },
+    { "id": "sources", "statement": "External orbital parameters have dated source references.", "evidence": { "method": "source_check", "description": "Verify source URLs and retrieval dates." } }
+  ],
+  "review": { "required": false }
+}

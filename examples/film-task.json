@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "title": "Create a short animated scene",
+  "domain": "film",
+  "intent": "Create a 90-second animated scene with a readable story, natural pacing, and a reviewable final render.",
+  "impact": "low",
+  "outputs": [
+    { "kind": "script", "format": "md", "description": "Complete dialogue and action with timing notes." },
+    { "kind": "video", "format": "mp4", "description": "A reviewable full-resolution scene render with sound." }
+  ],
+  "acceptance": [
+    { "id": "story", "statement": "The scene has a clear setup, turn, and resolution.", "evidence": { "method": "human_review", "description": "Review script and final scene together." } },
+    { "id": "render", "statement": "The video plays end to end with synchronized sound.", "evidence": { "method": "render", "description": "Inspect exported video duration, frames, and audio playback." } }
+  ],
+  "review": { "required": false }
+}
