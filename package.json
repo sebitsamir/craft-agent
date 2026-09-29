@@ -3,10 +3,21 @@
   "version": "0.3.0",
   "private": true,
   "type": "module",
-  "bin": { "craft-agent": "./src/cli.mjs" },
+  "bin": {
+    "craft-agent": "./src/cli.mjs"
+  },
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/cli.mjs && node --check src/lib/process.mjs && node --check src/lib/inspect.mjs && node --check src/lib/verify.mjs && node --check src/lib/domains.mjs && node --check src/lib/task-contract.mjs"
+    "build": "tsc --build",
+    "check:syntax": "node --check src/cli.mjs && node --check src/lib/process.mjs && node --check src/lib/inspect.mjs && node --check src/lib/verify.mjs && node --check src/lib/domains.mjs && node --check src/lib/task-contract.mjs",
+    "check:types": "tsc --build",
+    "check": "npm run check:syntax && npm run check:types"
   },
-  "engines": { "node": ">=20" }
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
 }
