@@ -11,4 +11,7 @@ export * from './port/event-store.js';
 export * from './port/action-guard.js';
 export * from './state/task-run.js';
 
-
+// F2 Slice 2: Scheduler and Execution Engine
+export * from './scheduler/retry.js';
+export * from './scheduler/cancel.js';
+export * from './scheduler/executor.js';
