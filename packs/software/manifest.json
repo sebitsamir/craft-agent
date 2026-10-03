@@ -1,0 +1,41 @@
+{
+  "id": "software-pack",
+  "name": "Software Engineering Pack",
+  "version": "0.3.0",
+  "domain": "software",
+  "status": "available",
+  "description": "Inspects software repositories, runs declared npm scripts, and validates task contracts. First real capability pack, extracted from the v0.3 seed.",
+  "actions": [
+    {
+      "name": "inspect",
+      "description": "Inspects a software repository: counts source files, tests, scripts, and dependencies without modifying anything.",
+      "inputs": ["repository_path"],
+      "outputs": ["inspection_report"],
+      "permissions": ["read_local"]
+    },
+    {
+      "name": "verify",
+      "description": "Runs selected declared npm scripts and reports pass/fail/blocked status for each.",
+      "inputs": ["repository_path", "script_names"],
+      "outputs": ["verification_report"],
+      "permissions": ["read_local", "execute"]
+    },
+    {
+      "name": "validate-task",
+      "description": "Validates a domain-neutral task contract against the schema.",
+      "inputs": ["task_contract_path"],
+      "outputs": ["validation_result"],
+      "permissions": ["read_local"]
+    }
+  ],
+  "validators": [
+    "typecheck",
+    "build",
+    "test",
+    "lint"
+  ],
+  "permissions": [
+    "read_local",
+    "execute"
+  ]
+}

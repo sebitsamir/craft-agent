@@ -1,0 +1,21 @@
+{
+  "name": "@craft-agent/pack-software",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Software engineering capability pack: repository inspection, verification, and workspace mapping.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./manifest.json": "./manifest.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@craft-agent/contracts": "workspace:*",
+    "@craft-agent/kernel": "workspace:*"
+  }
+}
