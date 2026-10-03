@@ -45,6 +45,37 @@ export const CraftErrorCode = {
   // Protocol
   PROTOCOL_MALFORMED: 'PROTOCOL_MALFORMED',
   PROTOCOL_SEQUENCE_INVALID: 'PROTOCOL_SEQUENCE_INVALID',
+
+    // ---------------------------------------------------------------------------
+  // F2 kernel, storage, and durability errors.
+  // These codes are stable operational codes used by the event store,
+  // scheduler, budget guard, external-action guard, and artifact store.
+  // ---------------------------------------------------------------------------
+
+  // A stored or requested event envelope is malformed.
+  EVENT_MALFORMED: 'EVENT_MALFORMED',
+
+  // Event replay detected a missing, duplicated, or out-of-order sequence.
+  EVENT_SEQUENCE_INVALID: 'EVENT_SEQUENCE_INVALID',
+
+  // The task/step state machine received an illegal transition or payload.
+  TASK_STATE_INVALID: 'TASK_STATE_INVALID',
+
+  // A task exceeded an explicit budget limit.
+  BUDGET_EXCEEDED: 'BUDGET_EXCEEDED',
+
+  // An external action was completed/failed in an unexpected state,
+  // or a duplicate action was attempted without a proper idempotency key.
+  EXTERNAL_ACTION_CONFLICT: 'EXTERNAL_ACTION_CONFLICT',
+
+  // A content-addressed blob is missing from local artifact storage.
+  ARTIFACT_BLOB_MISSING: 'ARTIFACT_BLOB_MISSING',
+
+  // A stored blob no longer matches its expected SHA-256 hash.
+  ARTIFACT_HASH_MISMATCH: 'ARTIFACT_HASH_MISMATCH',
+
+  // SQLite schema migration failed and must not be partially applied.
+  STORAGE_MIGRATION_FAILED: 'STORAGE_MIGRATION_FAILED',
 } as const;
 
 export type CraftErrorCode = (typeof CraftErrorCode)[keyof typeof CraftErrorCode];

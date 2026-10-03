@@ -1,0 +1,19 @@
+{
+  "name": "@craft-agent/kernel",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Domain-neutral execution kernel: ports, state machines, budgets, and failure taxonomy.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@craft-agent/contracts": "workspace:*"
+  }
+}

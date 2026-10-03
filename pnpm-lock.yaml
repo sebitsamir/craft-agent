@@ -15,12 +15,51 @@ importers:
         specifier: ^5.7.3
         version: 5.9.3
 
+  packages/artifacts:
+    dependencies:
+      '@craft-agent/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/contracts: {}
+
+  packages/kernel:
+    dependencies:
+      '@craft-agent/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
+  packages/storage:
+    dependencies:
+      '@craft-agent/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@craft-agent/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      better-sqlite3:
+        specifier: ^13.0.3
+        version: 13.0.3
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^9.6.0
+        version: 9.6.0
 
 packages:
 
+  '@types/better-sqlite3@9.6.0':
+    resolution: {integrity: sha512-ZEEwBSgMu7GYJOynoagg5X9JbxfL6dTJDsgViJIqh67jV44kyOr9RXfmFjLK5rzC4MWssP06t9hu/JwGDnUbCg==}
+
   '@types/node@22.20.4':
     resolution: {integrity: sha512-zJRE40jpHtKqE/C4fgHrAKQLJuSpzEnP9ff9Y7YtoR3Wd2pwqzlekDeEuUQXjRd+QCYnVnNwuJYmhdk9XV8gvA==}
+
+  better-sqlite3@13.0.3:
+    resolution: {integrity: sha512-RbOBxmLBG8uvFUc15X9+9SFemKcQ0WBuISBVkpuiaUB2qblC8UWlHEjdWVoZ8AdhSwmoEgsiXKfopX0CQxaACQ==}
+    engines: {node: '>=22'}
+
+  node-addon-api@8.9.2:
+    resolution: {integrity: sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==}
+    engines: {node: ^18 || ^20 || >= 21}
 
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
@@ -32,9 +71,19 @@ packages:
 
 snapshots:
 
+  '@types/better-sqlite3@9.6.0':
+    dependencies:
+      '@types/node': 22.20.4
+
   '@types/node@22.20.4':
     dependencies:
       undici-types: 6.21.0
+
+  better-sqlite3@13.0.3:
+    dependencies:
+      node-addon-api: 8.9.2
+
+  node-addon-api@8.9.2: {}
 
   typescript@5.9.3: {}
 

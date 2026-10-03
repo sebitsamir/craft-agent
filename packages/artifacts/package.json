@@ -1,0 +1,19 @@
+{
+  "name": "@craft-agent/artifacts",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Content-addressed artifact blob storage for Craft Agent.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@craft-agent/contracts": "workspace:*"
+  }
+}

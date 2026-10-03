@@ -1,0 +1,24 @@
+{
+  "name": "@craft-agent/storage",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "SQLite persistence adapters for Craft Agent events, external actions, and artifact metadata.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@craft-agent/contracts": "workspace:*",
+    "@craft-agent/kernel": "workspace:*",
+    "better-sqlite3": "^13.0.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0"
+  }
+}
