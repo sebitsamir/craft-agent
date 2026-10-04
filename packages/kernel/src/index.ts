@@ -25,3 +25,5 @@ export * from './worktree/gate.js';
 export * from './patch/model.js';
 export * from './patch/apply.js';
 export * from './patch/artifacts.js';
+
+export * from './task-runner.js';
