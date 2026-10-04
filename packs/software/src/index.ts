@@ -26,3 +26,6 @@ export * from './checks/verify.js';
 export * from './worktree/snapshot.js';
 export * from './worktree/diff.js';
 export * from './worktree/gate.js';
+
+// Scoped patch application (S3).
+export * from './patch/model.js';
