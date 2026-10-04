@@ -2,6 +2,7 @@
 import { createInterface } from 'node:readline';
 import { inspect } from './lib/inspect.mjs';
 import { verify } from './lib/verify.mjs';
+import { inspectFilmProject, verifyMediaLinks } from '../packs/film/dist/index.js';
 import {
   serializeProtocolMessage,
   parseProtocolMessage
@@ -34,6 +35,10 @@ rl.on('line', async (line) => {
       result = await inspect(request.params?.path || '.');
     } else if (request.method === 'pack.software.verify') {
       result = await verify(request.params?.path || '.', request.params?.scripts || []);
+    } else if (request.method === 'pack.film.inspect') {
+      result = await inspectFilmProject(request.params?.path || '.');
+    } else if (request.method === 'pack.film.verify') {
+      result = await verifyMediaLinks(request.params?.path || '.');
     } else if (request.method === 'task.run') {
       const contract = request.params?.contract;
       if (!contract || !Array.isArray(contract.acceptance)) {
@@ -42,7 +47,6 @@ rl.on('line', async (line) => {
       const taskId = contract.taskId || `task-${Date.now()}`;
       result = { taskId, status: 'accepted' };
 
-      // Fire and forget the progress simulation
       simulateTaskProgress(taskId, contract).catch(e =>
         process.stderr.write(`[engine] task simulation error: ${e.message}\n`)
       );
@@ -88,7 +92,6 @@ async function simulateTaskProgress(taskId, task) {
     emit('step.started', { stepId });
     await sleep(800 + Math.random() * 1200);
 
-    // 80% chance of success for demo purposes
     if (Math.random() > 0.2) {
       emit('step.succeeded', { stepId });
     } else {
@@ -99,4 +102,4 @@ async function simulateTaskProgress(taskId, task) {
   emit('task.succeeded', {});
 }
 
-process.stderr.write('[engine] Craft Agent headless engine started.\n');
+process.stderr.write('[engine] Junub Agent headless engine started.\n');
