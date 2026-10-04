@@ -4,21 +4,17 @@
  * Applies a validated patch to the filesystem. Always used under the S2
  * worktree safety gate so uncommitted work is never silently overwritten.
  *
- * The Master Spec (Section 13) requires:
- * "Patches apply to a bounded file set only; out-of-scope paths rejected;
- * before/after snapshots recorded."
- *
  * Layered safety:
  *  1. Validation (model.ts) rejects out-of-scope, absolute, and traversal paths.
  *  2. Apply-time re-check verifies every path against the scope and the
- *     repository root again, even if validation passed (defense in depth).
- *  3. The safety gate (gate.ts) blocks application entirely on a dirty
- *     worktree unless explicit consent is given.
+ *     repository root again (defense in depth).
+ *  3. The safety gate (gate.ts) blocks application on a dirty worktree
+ *     unless explicit consent is given.
  */
 
 import { mkdir, writeFile, unlink, access } from 'node:fs/promises';
 import { dirname, resolve, relative, isAbsolute } from 'node:path';
-import { validatePatch, normalizePath, type Patch } from './model.js';
+import { validatePatch, normalizePath, type Patch, type PatchOperation } from './model.js';
 import {
   guardedMutation,
   type WorktreeGateDecision,
@@ -39,21 +35,23 @@ export interface PatchApplyResult {
 }
 
 /**
+ * Optional hooks invoked around each operation. Used by the artifact
+ * recorder to capture content hashes before and after each change.
+ */
+export interface PatchOperationHooks {
+  beforeOperation?(op: PatchOperation, targetPath: string): Promise<void> | void;
+  afterOperation?(op: PatchOperation, targetPath: string): Promise<void> | void;
+}
+
+/**
  * The full result of a guarded patch application.
  */
 export interface GuardedPatchResult {
-  /** Whether the patch passed structural/scope validation. */
   readonly validated: boolean;
   readonly validationErrors: readonly string[];
-
-  /** The safety-gate decision, present once validation passes. */
   readonly decision?: WorktreeGateDecision;
-
-  /** Whether the operations actually ran. */
   readonly applied: boolean;
   readonly applyResult?: PatchApplyResult;
-
-  /** Before/after snapshots and their diff, present when the gate allowed. */
   readonly before?: WorktreeSnapshot;
   readonly after?: WorktreeSnapshot;
   readonly diff?: SnapshotDiff;
@@ -66,15 +64,15 @@ export interface GuardedPatchResult {
  * apply-time scope and root-escape re-checks and enforces per-kind
  * existence preconditions.
  *
- * Prefer guardedApplyPatch, which wraps this in validation + the safety gate.
- *
  * @param root   The repository root.
  * @param patch  A validated patch to apply.
+ * @param hooks  Optional before/after observers (used for artifact hashing).
  * @returns      A summary of what was applied.
  */
 export async function applyPatchOperations(
   root: string,
   patch: Patch,
+  hooks?: PatchOperationHooks,
 ): Promise<PatchApplyResult> {
   const allowedSet = new Set(patch.allowedPaths.map((p) => normalizePath(p)));
   const createdPaths: string[] = [];
@@ -93,6 +91,9 @@ export async function applyPatchOperations(
 
     // Resolve the target and confirm it stays inside the repository root.
     const targetPath = resolveWithinRoot(root, normalized);
+
+    // Let observers capture pre-change state.
+    await hooks?.beforeOperation?.(op, targetPath);
 
     switch (op.kind) {
       case 'create': {
@@ -124,10 +125,12 @@ export async function applyPatchOperations(
       }
 
       default: {
-        // Unreachable for a validated patch, but keep the guard explicit.
         throw new Error('Unknown patch operation kind.');
       }
     }
+
+    // Let observers capture post-change state.
+    await hooks?.afterOperation?.(op, targetPath);
   }
 
   return {
@@ -141,35 +144,19 @@ export async function applyPatchOperations(
 
 /**
  * Validates a patch and applies it under the worktree safety gate.
- *
- * Flow:
- *  1. Validate the patch. If invalid, return without touching the filesystem.
- *  2. Hand off to guardedMutation: before-snapshot -> gate -> apply ->
- *     after-snapshot -> diff.
- *
- * @param root     The repository root.
- * @param patch    The patch to apply (typically parsed JSON).
- * @param options  Safety overrides such as allowDirty.
- * @returns        A full record of validation, gate decision, application, and diff.
  */
 export async function guardedApplyPatch(
   root: string,
   patch: unknown,
   options: WorktreeSafetyOptions = {},
 ): Promise<GuardedPatchResult> {
-  // 1. Validate first. An invalid patch never reaches the filesystem.
   const validation = validatePatch(patch);
   if (!validation.valid) {
-    return {
-      validated: false,
-      validationErrors: validation.errors,
-      applied: false,
-    };
+    return { validated: false, validationErrors: validation.errors, applied: false };
   }
 
   const validPatch = patch as Patch;
 
-  // 2. Apply under the safety gate.
   const gate = await guardedMutation(
     root,
     () => applyPatchOperations(root, validPatch),
@@ -192,24 +179,16 @@ export async function guardedApplyPatch(
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Resolves a relative path within root, rejecting any escape.
- */
 function resolveWithinRoot(root: string, relativePath: string): string {
   const resolvedRoot = resolve(root);
   const target = resolve(resolvedRoot, relativePath);
   const rel = relative(resolvedRoot, target);
-
   if (rel.startsWith('..') || isAbsolute(rel)) {
     throw new Error(`Path "${relativePath}" escapes the repository root.`);
   }
-
   return target;
 }
 
-/**
- * Returns true when a file exists.
- */
 async function exists(p: string): Promise<boolean> {
   try {
     await access(p);

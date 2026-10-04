@@ -30,3 +30,4 @@ export * from './worktree/gate.js';
 // Scoped patch application (S3).
 export * from './patch/model.js';
 export * from './patch/apply.js';
+export * from './patch/artifacts.js';
