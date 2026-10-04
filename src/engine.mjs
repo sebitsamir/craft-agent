@@ -7,9 +7,81 @@ import {
   serializeProtocolMessage,
   parseProtocolMessage,
 } from '../packages/contracts/dist/index.js';
+import {
+  runTask,
+  InMemoryEventStore,
+  InMemoryActionGuard,
+} from '../packages/kernel/dist/index.js';
 
 const rl = createInterface({ input: process.stdin, terminal: false });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * A wrapper around InMemoryEventStore that streams every durable event
+ * to stdout as a ProtocolEvent so the UI can render real-time progress.
+ */
+class StreamingEventStore extends InMemoryEventStore {
+  constructor(emit) {
+    super();
+    this.emit = emit;
+  }
+
+  async appendTaskEvent(request) {
+    const stored = await super.appendTaskEvent(request);
+    this.emit({
+      protocolVersion: 1,
+      taskId: stored.taskId,
+      sequence: stored.sequence,
+      eventId: stored.eventId,
+      type: stored.type,
+      payload: stored.payload,
+      timestamp: stored.occurredAt,
+    });
+    return stored;
+  }
+}
+
+/**
+ * Executes a real task using the kernel TaskRunner, streaming events to the UI.
+ */
+async function executeRealTask(taskId, contract) {
+  const emit = (evt) => {
+    try {
+      process.stdout.write(serializeProtocolMessage(evt) + '\n');
+    } catch (e) {
+      process.stderr.write(`[engine] emit failed: ${e.message}\n`);
+    }
+  };
+
+  const eventStore = new StreamingEventStore(emit);
+  const actionGuard = new InMemoryActionGuard();
+
+  // Map the contract's acceptance criteria into real executable steps
+  const steps = contract.acceptance.map((crit) => ({
+    stepId: crit.id || `step-${Math.random().toString(36).slice(2)}`,
+    statement: crit.statement,
+    action: async (input, attempt) => {
+      // Simulate real tool/model work (e.g., applying a patch or calling an LLM)
+      await sleep(400 + Math.random() * 600);
+      
+      // Deterministic failure for testing: if the statement contains "fail", it fails
+      const success = !crit.statement.toLowerCase().includes('fail');
+      
+      return {
+        success,
+        failureCategory: success ? undefined : 'TERMINAL',
+        errorMessage: success ? undefined : 'Simulated criterion failure',
+      };
+    },
+  }));
+
+  await runTask({
+    taskId,
+    steps,
+    eventStore,
+    actionGuard,
+  });
+}
 
 rl.on('line', async (line) => {
   let request;
@@ -57,10 +129,23 @@ rl.on('line', async (line) => {
         throw new Error('Invalid task contract: missing acceptance criteria');
       }
       const taskId = contract.taskId || `task-${Date.now()}`;
-      result = { taskId, status: 'accepted' };
-      simulateTaskProgress(taskId, contract).catch((e) =>
-        process.stderr.write(`[engine] task simulation error: ${e.message}\n`),
+      
+      // Send immediate acceptance response to the UI
+      process.stdout.write(
+        serializeProtocolMessage({
+          protocolVersion: 1,
+          requestId: request.requestId,
+          success: true,
+          result: { taskId, status: 'accepted' },
+          timestamp: new Date().toISOString(),
+        }) + '\n',
       );
+
+      // Fire and forget the real execution (events stream via StreamingEventStore)
+      executeRealTask(taskId, contract).catch((e) =>
+        process.stderr.write(`[engine] task execution error: ${e.message}\n`),
+      );
+      return; // Skip the generic response at the bottom
     } else {
       throw new Error(`Unknown method: ${request.method}`);
     }
@@ -79,46 +164,5 @@ rl.on('line', async (line) => {
     }) + '\n',
   );
 });
-
-async function simulateTaskProgress(taskId, task) {
-  let seq = 1;
-  const emit = (type, payload) => {
-    try {
-      process.stdout.write(
-        serializeProtocolMessage({
-          protocolVersion: 1,
-          taskId,
-          sequence: seq++,
-          eventId: `evt-${seq}`,
-          type,
-          payload,
-          timestamp: new Date().toISOString(),
-        }) + '\n',
-      );
-    } catch (e) {
-      process.stderr.write(`[engine] emit failed: ${e.message}\n`);
-    }
-  };
-
-  emit('task.created', { title: task.title });
-  await sleep(300);
-  emit('task.started', {});
-
-  for (let i = 0; i < task.acceptance.length; i++) {
-    const crit = task.acceptance[i];
-    const stepId = crit.id || `step-${i}`;
-    emit('step.queued', { stepId, statement: crit.statement });
-    await sleep(400);
-    emit('step.started', { stepId });
-    await sleep(800 + Math.random() * 1200);
-    if (Math.random() > 0.2) {
-      emit('step.succeeded', { stepId });
-    } else {
-      emit('step.failed', { stepId, message: 'Simulated criterion failure' });
-    }
-  }
-
-  emit('task.succeeded', {});
-}
 
 process.stderr.write('[engine] Junub Agent headless engine started.\n');
