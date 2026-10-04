@@ -210,7 +210,8 @@ function validateOperation(
 /**
  * Normalizes a path to forward slashes and strips a leading "./".
  */
-function normalizePath(p: string): string {
+
+export function normalizePath(p: string): string {
   return p.replaceAll('\\', '/').replace(/^\.\//, '');
 }
 
