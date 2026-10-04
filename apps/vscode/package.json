@@ -32,6 +32,10 @@
       {
         "command": "junubAgent.inspectFilmProject",
         "title": "Junub Agent: Inspect Film Project"
+      },
+      {
+        "command": "junubAgent.loadFilmProject",
+        "title": "Junub Agent: Load Film Project"
       }
     ],
     "views": {
@@ -39,6 +43,10 @@
         {
           "id": "junubAgentTaskProgress",
           "name": "Junub Agent Progress"
+        },
+        {
+          "id": "junubAgentFilmProject",
+          "name": "Junub Agent Film"
         }
       ]
     }

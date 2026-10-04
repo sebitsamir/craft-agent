@@ -24,6 +24,7 @@ export interface FilmReportView {
   readonly timelinesCount: number;
   readonly mediaCount: number;
   readonly projectFilesCount: number;
+  readonly mediaAssets: readonly string[];
   readonly timelines: readonly FilmTimelineView[];
   readonly checks: readonly FilmMediaCheckView[];
   readonly passed: boolean;

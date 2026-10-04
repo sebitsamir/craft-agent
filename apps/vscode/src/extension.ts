@@ -3,10 +3,32 @@ import * as fs from 'node:fs';
 import { EngineTransport } from './transport.js';
 import { showVerifyPanel, type VerifyReport } from './views/verifyView.js';
 import { showFilmPanel, type FilmReportView } from './views/filmView.js';
+import { FilmTreeProvider } from './views/filmTree.js';
 import { TaskProgressProvider } from './views/taskProgressView.js';
 
 let transport: EngineTransport | undefined;
 let outputChannel: vscode.OutputChannel;
+
+/**
+ * Fetches a combined film report (inspect + verify) over the protocol.
+ * Shared by the webview command and the sidebar tree command.
+ */
+async function fetchFilmReport(client: EngineTransport, targetPath: string): Promise<FilmReportView> {
+  const insp = await client.request('pack.film.inspect', { path: targetPath });
+  const ver = await client.request('pack.film.verify', { path: targetPath });
+  return {
+    root: insp.root,
+    projectType: insp.project.projectType,
+    scriptsCount: insp.project.scripts.length,
+    timelinesCount: insp.project.timelines.length,
+    mediaCount: insp.project.mediaAssets.length,
+    projectFilesCount: insp.project.projectFiles.length,
+    mediaAssets: insp.project.mediaAssets,
+    timelines: insp.timelines,
+    checks: ver.checks,
+    passed: ver.passed,
+  };
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   outputChannel = vscode.window.createOutputChannel('Junub Agent');
@@ -15,12 +37,19 @@ export function activate(context: vscode.ExtensionContext): void {
   const enginePath = context.asAbsolutePath('../../src/engine.mjs');
   transport = new EngineTransport(enginePath, outputChannel);
 
-  // Progress tree view
+  // Task progress tree view
   const progressProvider = new TaskProgressProvider();
-  const treeView = vscode.window.createTreeView('junubAgentTaskProgress', {
+  const progressView = vscode.window.createTreeView('junubAgentTaskProgress', {
     treeDataProvider: progressProvider,
   });
-  context.subscriptions.push(treeView);
+  context.subscriptions.push(progressView);
+
+  // Film project tree view
+  const filmTreeProvider = new FilmTreeProvider();
+  const filmView = vscode.window.createTreeView('junubAgentFilmProject', {
+    treeDataProvider: filmTreeProvider,
+  });
+  context.subscriptions.push(filmView);
 
   transport.onProtocolEvent((evt) => {
     if (evt.type === 'task.created') {
@@ -103,7 +132,7 @@ export function activate(context: vscode.ExtensionContext): void {
   });
 
   // ---------------------------------------------------------------------
-  // Command: Inspect Film Project
+  // Command: Inspect Film Project (webview + sync tree)
   // ---------------------------------------------------------------------
   const inspectFilmCmd = vscode.commands.registerCommand('junubAgent.inspectFilmProject', async () => {
     const client = transport;
@@ -111,7 +140,6 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.window.showErrorMessage('Junub Agent engine is not running. Reload the window to restart it.');
       return;
     }
-
     const uris = await vscode.window.showOpenDialog({
       canSelectFiles: false,
       canSelectFolders: true,
@@ -126,34 +154,19 @@ export function activate(context: vscode.ExtensionContext): void {
     outputChannel.appendLine(`[UI] Inspecting film project: ${targetPath}`);
 
     try {
-      const [inspectResult, verifyResult] = (await vscode.window.withProgress(
+      const report = await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
           title: 'Junub Agent: inspecting film project',
           cancellable: false,
         },
-        async () => {
-          const insp = await client.request('pack.film.inspect', { path: targetPath });
-          const ver = await client.request('pack.film.verify', { path: targetPath });
-          return [insp, ver];
-        },
-      )) as [any, any];
-
-      const report: FilmReportView = {
-        root: inspectResult.root,
-        projectType: inspectResult.project.projectType,
-        scriptsCount: inspectResult.project.scripts.length,
-        timelinesCount: inspectResult.project.timelines.length,
-        mediaCount: inspectResult.project.mediaAssets.length,
-        projectFilesCount: inspectResult.project.projectFiles.length,
-        timelines: inspectResult.timelines,
-        checks: verifyResult.checks,
-        passed: verifyResult.passed,
-      };
+        () => fetchFilmReport(client, targetPath),
+      );
 
       outputChannel.appendLine('[UI] Film inspection complete.');
       outputChannel.appendLine(JSON.stringify(report, null, 2));
 
+      filmTreeProvider.setReport(report);
       showFilmPanel(report);
 
       const missingCount = report.checks.filter((c) => c.status === 'missing').length;
@@ -169,7 +182,49 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   });
 
-  context.subscriptions.push(inspectCmd, verifyCmd, runTaskCmd, inspectFilmCmd);
+  // ---------------------------------------------------------------------
+  // Command: Load Film Project (sidebar tree only)
+  // ---------------------------------------------------------------------
+  const loadFilmCmd = vscode.commands.registerCommand('junubAgent.loadFilmProject', async () => {
+    const client = transport;
+    if (!client) {
+      vscode.window.showErrorMessage('Junub Agent engine is not running. Reload the window to restart it.');
+      return;
+    }
+    const uris = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: 'Load Film Project',
+    });
+    const selectedUri = uris && uris[0];
+    if (!selectedUri) return;
+
+    try {
+      const report = await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: 'Junub Agent: loading film project',
+          cancellable: false,
+        },
+        () => fetchFilmReport(client, selectedUri.fsPath),
+      );
+
+      filmTreeProvider.setReport(report);
+      vscode.commands.executeCommand('junubAgentFilmProject.focus');
+
+      const missing = report.checks.filter((c) => c.status === 'missing').length;
+      vscode.window.showInformationMessage(
+        `Junub Agent: loaded film project (${report.mediaAssets.length} media, ${missing} missing).`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      outputChannel.appendLine(`[UI] Film load failed: ${message}`);
+      vscode.window.showErrorMessage(`Junub Agent film load failed: ${message}`);
+    }
+  });
+
+  context.subscriptions.push(inspectCmd, verifyCmd, runTaskCmd, inspectFilmCmd, loadFilmCmd);
   outputChannel.appendLine('[UI] Junub Agent extension activated.');
 }
 
