@@ -1,5 +1,5 @@
 /**
- * Public API for @craft-agent/pack-software.
+ * Public API for @junub-agent/pack-software.
  *
  * This is the first real capability pack, extracted from the v0.3 seed.
  * It provides repository inspection, script verification, and task

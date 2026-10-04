@@ -1,4 +1,4 @@
-import { CraftError, CraftErrorCode } from '@craft-agent/contracts'
+import { JunubError, JunubErrorCode } from '@junub-agent/contracts'
 
 /**
  * Budget limits declared by a task/project/user.
@@ -109,8 +109,8 @@ export function checkBudget(
 
     // Invalid limit values are a contract bug, not a runtime usage problem.
     if (typeof limit !== 'number' || !Number.isFinite(limit) || limit < 0) {
-      throw new CraftError(
-        CraftErrorCode.INVALID_BUDGET,
+      throw new JunubError(
+        JunubErrorCode.INVALID_BUDGET,
         `Budget limit "${check.limitField}" must be a non-negative finite number.`,
         { limitField: check.limitField, limit },
       );
@@ -119,8 +119,8 @@ export function checkBudget(
     // Budget exhaustion is a controlled stop.
     // The caller must persist partial state and report how to continue.
     if (used > limit) {
-      throw new CraftError(
-        CraftErrorCode.BUDGET_EXCEEDED,
+      throw new JunubError(
+        JunubErrorCode.BUDGET_EXCEEDED,
         `Budget exceeded for ${check.label}: used ${used}, limit ${limit}.`,
         {
           limitField: check.limitField,

@@ -4,7 +4,7 @@ import path from 'node:path';
 import {
   validateCapabilityManifest,
   type CapabilityPackManifest,
-} from '@craft-agent/contracts';
+} from '@junub-agent/contracts';
 
 /**
  * Software Pack Manifest Loader
@@ -32,7 +32,7 @@ const MANIFEST_PATH = path.resolve(THIS_DIR, '..', 'manifest.json');
  * Loads the software pack manifest from disk and validates it.
  *
  * @returns The validated CapabilityPackManifest.
- * @throws CraftError if the manifest is missing or invalid.
+ * @throws JunubError if the manifest is missing or invalid.
  */
 export function loadSoftwarePackManifest(): CapabilityPackManifest {
   // Read the manifest file.
@@ -60,7 +60,7 @@ export function loadSoftwarePackManifest(): CapabilityPackManifest {
   }
 
   // Validate against the CapabilityPackManifest schema.
-  // This throws CraftError with a stable code if invalid.
+  // This throws JunubError with a stable code if invalid.
   return validateCapabilityManifest(parsed);
 }
 

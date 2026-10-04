@@ -1,4 +1,4 @@
-import { CraftError, CraftErrorCode } from '@craft-agent/contracts';
+import { JunubError, JunubErrorCode } from '@junub-agent/contracts';
 import type { StoredTaskEvent } from '../port/event-store.js'
 import { FAILURE_CATEGORIES, type FailureCategory } from '../failure.js';
 
@@ -111,16 +111,16 @@ export function applyTaskEvent(
   event: StoredTaskEvent,
 ): TaskRunState {
   if (event.taskId !== state.taskId) {
-    throw new CraftError(
-      CraftErrorCode.TASK_STATE_INVALID,
+    throw new JunubError(
+      JunubErrorCode.TASK_STATE_INVALID,
       `Event belongs to task "${event.taskId}" but replay is for task "${state.taskId}".`,
       { eventTaskId: event.taskId, replayTaskId: state.taskId },
     );
   }
 
   if (event.sequence !== state.lastSequence + 1) {
-    throw new CraftError(
-      CraftErrorCode.EVENT_SEQUENCE_INVALID,
+    throw new JunubError(
+      JunubErrorCode.EVENT_SEQUENCE_INVALID,
       `Expected event sequence ${state.lastSequence + 1} but received ${event.sequence}.`,
       { expectedSequence: state.lastSequence + 1, actualSequence: event.sequence },
     );
@@ -197,8 +197,8 @@ export function applyTaskEvent(
     }
 
     default: {
-      throw new CraftError(
-        CraftErrorCode.TASK_STATE_INVALID,
+      throw new JunubError(
+        JunubErrorCode.TASK_STATE_INVALID,
         `Unknown task event type "${event.type}".`,
         { eventId: event.eventId, type: event.type },
       );
@@ -213,7 +213,7 @@ export function applyTaskEvent(
 function asPayloadRecord(payload: unknown): Record<string, unknown> {
   if (payload === undefined || payload === null) return {};
   if (typeof payload !== 'object' || Array.isArray(payload)) {
-    throw new CraftError(CraftErrorCode.EVENT_MALFORMED, 'Event payload must be an object when present.');
+    throw new JunubError(JunubErrorCode.EVENT_MALFORMED, 'Event payload must be an object when present.');
   }
   return payload as Record<string, unknown>;
 }
@@ -221,7 +221,7 @@ function asPayloadRecord(payload: unknown): Record<string, unknown> {
 function readRequiredString(payload: Record<string, unknown>, field: string, event: StoredTaskEvent): string {
   const value = payload[field];
   if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new CraftError(CraftErrorCode.EVENT_MALFORMED, `Event "${event.type}" payload requires nonempty string "${field}".`);
+    throw new JunubError(JunubErrorCode.EVENT_MALFORMED, `Event "${event.type}" payload requires nonempty string "${field}".`);
   }
   return value;
 }
@@ -236,7 +236,7 @@ function readOptionalFailureCategory(payload: Record<string, unknown>, event: St
   const value = payload.failureCategory;
   if (value === undefined || value === null) return undefined;
   if (!isFailureCategory(value)) {
-    throw new CraftError(CraftErrorCode.EVENT_MALFORMED, `Event "${event.type}" payload has invalid failureCategory "${String(value)}".`);
+    throw new JunubError(JunubErrorCode.EVENT_MALFORMED, `Event "${event.type}" payload has invalid failureCategory "${String(value)}".`);
   }
   return value;
 }
@@ -248,7 +248,7 @@ function isFailureCategory(value: unknown): value is FailureCategory {
 function requireExistingStep(state: TaskRunDraft, stepId: string, event: StoredTaskEvent): StepRunState {
   const step = state.steps.get(stepId);
   if (!step) {
-    throw new CraftError(CraftErrorCode.TASK_STATE_INVALID, `Event "${event.type}" references unknown step "${stepId}".`);
+    throw new JunubError(JunubErrorCode.TASK_STATE_INVALID, `Event "${event.type}" references unknown step "${stepId}".`);
   }
   return step;
 }

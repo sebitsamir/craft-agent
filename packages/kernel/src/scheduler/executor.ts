@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { CraftError, CraftErrorCode } from '@craft-agent/contracts';
+import { JunubError, JunubErrorCode } from '@junub-agent/contracts';
 import type { EventStore } from '../port/event-store.js'
 import type { ActionGuard } from '../port/action-guard.js'
 import { type FailureCategory } from '../failure.js';
@@ -27,7 +27,7 @@ export interface StepActionResult {
   readonly success: boolean;
   readonly failureCategory?: FailureCategory;
   readonly errorMessage?: string;
-  readonly errorCode?: CraftErrorCode;
+  readonly errorCode?: JunubErrorCode;
   readonly usageDelta?: Partial<BudgetUsage>;
 }
 
@@ -101,7 +101,7 @@ export async function executeStep(
     try {
       checkBudget(input.limits, usage);
     } catch (err) {
-      if (err instanceof CraftError && err.code === CraftErrorCode.BUDGET_EXCEEDED) {
+      if (err instanceof JunubError && err.code === JunubErrorCode.BUDGET_EXCEEDED) {
         await eventStore.appendTaskEvent({
           taskId: input.taskId,
           eventId: randomUUID(),
@@ -200,8 +200,8 @@ export async function executeStep(
       idempotencyKey: `${input.idempotencyKey}:failed:final`,
     });
 
-    throw new CraftError(
-      result.errorCode ?? CraftErrorCode.TASK_STATE_INVALID,
+    throw new JunubError(
+      result.errorCode ?? JunubErrorCode.TASK_STATE_INVALID,
       `Step ${input.stepId} failed after ${attempts} attempts: ${result.errorMessage}`,
       { category, attempts }
     );

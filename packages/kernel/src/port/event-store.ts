@@ -2,7 +2,7 @@
  * Event store port.
  *
  * The kernel depends on this interface, not on SQLite.
- * A local SQLite adapter implements it in @craft-agent/storage.
+ * A local SQLite adapter implements it in @junub-agent/storage.
  * A future cloud adapter can implement the same interface.
  */
 
