@@ -1,0 +1,32 @@
+{
+  "id": "film-pack",
+  "name": "Film & Video Production Pack",
+  "version": "0.3.0",
+  "domain": "film",
+  "status": "available",
+  "description": "Inspects film projects, validates timelines (EDL/XML/FCP), and maps media assets. Proves domain neutrality of the Junub Agent architecture.",
+  "actions": [
+    {
+      "name": "inspect",
+      "description": "Inspects a film project directory: counts scripts, timelines, and media assets.",
+      "inputs": ["project_path"],
+      "outputs": ["inspection_report"],
+      "permissions": ["read_local"]
+    },
+    {
+      "name": "verify",
+      "description": "Validates the structural integrity of timelines and media references.",
+      "inputs": ["project_path", "timeline_names"],
+      "outputs": ["verification_report"],
+      "permissions": ["read_local", "execute"]
+    }
+  ],
+  "validators": [
+    "timeline_integrity",
+    "media_link_check"
+  ],
+  "permissions": [
+    "read_local",
+    "execute"
+  ]
+}

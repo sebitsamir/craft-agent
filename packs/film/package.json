@@ -1,0 +1,21 @@
+{
+  "name": "@junub-agent/pack-film",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Film and video production capability pack: timeline inspection, asset mapping, and project verification.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./manifest.json": "./manifest.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@junub-agent/contracts": "workspace:*",
+    "@junub-agent/kernel": "workspace:*"
+  }
+}
