@@ -102,3 +102,11 @@ export function mapFilmProject(startPath: string): FilmProjectInfo {
     isGitLfsPresent,
   };
 }
+
+/**
+ * Returns true when the given path looks like a media asset (by extension).
+ * Used by the film patch applicator to enforce media immutability.
+ */
+export function isMediaAssetPath(p: string): boolean {
+  return MEDIA_EXTS.has(path.extname(p).toLowerCase());
+}
