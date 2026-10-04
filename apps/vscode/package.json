@@ -36,7 +36,8 @@
       {
         "command": "junubAgent.loadFilmProject",
         "title": "Junub Agent: Load Film Project"
-      }
+      },
+            { "command": "junubAgent.applyFilmPatch", "title": "Junub Agent: Apply Film Patch" }
     ],
     "views": {
       "explorer": [

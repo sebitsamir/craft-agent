@@ -224,7 +224,66 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   });
 
-  context.subscriptions.push(inspectCmd, verifyCmd, runTaskCmd, inspectFilmCmd, loadFilmCmd);
+    // ---------------------------------------------------------------------
+  // Command: Apply Film Patch
+  // ---------------------------------------------------------------------
+  const applyFilmPatchCmd = vscode.commands.registerCommand('junubAgent.applyFilmPatch', async () => {
+    const client = transport;
+    if (!client) {
+      vscode.window.showErrorMessage('Junub Agent engine is not running. Reload the window to restart it.');
+      return;
+    }
+
+    const folderUris = await vscode.window.showOpenDialog({
+      canSelectFiles: false, canSelectFolders: true, canSelectMany: false,
+      openLabel: 'Select Film Project',
+    });
+    const folderUri = folderUris && folderUris[0];
+    if (!folderUri) return;
+
+    const patchUris = await vscode.window.showOpenDialog({
+      canSelectFiles: true, canSelectFolders: false, canSelectMany: false,
+      filters: { 'Patch': ['json'] },
+      openLabel: 'Select Patch',
+    });
+    const patchUri = patchUris && patchUris[0];
+    if (!patchUri) return;
+
+    try {
+      const patch = JSON.parse(fs.readFileSync(patchUri.fsPath, 'utf8'));
+      outputChannel.show(true);
+      outputChannel.appendLine(`[UI] Applying film patch to: ${folderUri.fsPath}`);
+
+      const report = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'Junub Agent: applying film patch', cancellable: false },
+        () => client.request('pack.film.applyPatch', { path: folderUri.fsPath, patch }),
+      ) as any;
+
+      outputChannel.appendLine(JSON.stringify(report, null, 2));
+
+      if (report.scopeViolation) {
+        vscode.window.showErrorMessage(
+          `Junub Agent: patch rejected — targets protected media: ${report.scopeViolations.join(', ')}`,
+        );
+      } else if (!report.applied) {
+        vscode.window.showWarningMessage(
+          'Junub Agent: patch not applied (worktree dirty or gate blocked). Uncommitted work preserved.',
+        );
+      } else {
+        const missing = report.missingMedia?.length ?? 0;
+        vscode.window.showInformationMessage(
+          `Junub Agent: patch applied (${report.artifacts.length} artifact(s)). ` +
+          (missing > 0 ? `WARNING: ${missing} media link(s) now missing.` : 'Media links OK.'),
+        );
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      outputChannel.appendLine(`[UI] Film patch failed: ${message}`);
+      vscode.window.showErrorMessage(`Junub Agent film patch failed: ${message}`);
+    }
+  });
+
+    context.subscriptions.push(inspectCmd, verifyCmd, runTaskCmd, inspectFilmCmd, loadFilmCmd, applyFilmPatchCmd);
   outputChannel.appendLine('[UI] Junub Agent extension activated.');
 }
 
