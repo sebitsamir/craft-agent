@@ -1,6 +1,6 @@
-# Craft Agent — universal creator seed
+# Junub Agent — universal creator seed
 
-Craft Agent is a provisional name for a future multi-domain creation platform. The [master specification](PRODUCT_BLUEPRINT.md) defines its project/task/artifact/evidence kernel, software-first delivery, capability packs for film, games, education, astronomy and other fields, safety boundaries, full target folder structure, and phased gates. The [master implementation prompt](MASTER_PROMPT.md) is a reusable handoff for subsequent engineering sessions. The [phase ledger](PHASE_LEDGER.md) separates verified work from plans.
+Junub Agent is a provisional name for a future multi-domain creation platform. The [master specification](PRODUCT_BLUEPRINT.md) defines its project/task/artifact/evidence kernel, software-first delivery, capability packs for film, games, education, astronomy and other fields, safety boundaries, full target folder structure, and phased gates. The [master implementation prompt](MASTER_PROMPT.md) is a reusable handoff for subsequent engineering sessions. The [phase ledger](PHASE_LEDGER.md) separates verified work from plans.
 
 **Current status: v0.3 seed.** The CLI inspects a software repository, runs selected declared npm scripts, lists domain metadata, and validates task contracts. It does not yet use an AI model, edit code, render media, provide a UI, or perform professional-domain work. Planned domains are marked planned.
 
