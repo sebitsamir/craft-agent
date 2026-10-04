@@ -25,3 +25,4 @@ export * from './checks/verify.js';
 // Worktree safety (S2).
 export * from './worktree/snapshot.js';
 export * from './worktree/diff.js';
+export * from './worktree/gate.js';
