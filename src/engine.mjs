@@ -1,41 +1,27 @@
 #!/usr/bin/env node
-/**
- * Headless Engine Daemon
- *
- * This is the server side of the Local Transport (Master Spec Section 10).
- * It reads newline-delimited JSON requests from stdin, routes them to the
- * appropriate capability pack, and writes protocol responses to stdout.
- *
- * Diagnostic logs are written to stderr so they do not corrupt the protocol.
- */
 import { createInterface } from 'node:readline';
 import { inspect } from './lib/inspect.mjs';
 import { verify } from './lib/verify.mjs';
 import {
-  validateProtocolRequest,
   serializeProtocolMessage,
-  parseProtocolMessage,
-  CraftError
+  parseProtocolMessage
 } from '../packages/contracts/dist/index.js';
 
 const rl = createInterface({ input: process.stdin, terminal: false });
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 rl.on('line', async (line) => {
   let request;
 
-  // 1. Parse and validate the protocol envelope
   try {
-    const raw = parseProtocolMessage(line);
-    request = validateProtocolRequest(raw);
+    request = parseProtocolMessage(line);
+    if (!request.requestId || !request.method) throw new Error('Missing requestId or method');
   } catch (err) {
-    const errorResponse = {
-      protocolVersion: 1,
-      requestId: 'unknown',
-      success: false,
+    process.stdout.write(serializeProtocolMessage({
+      protocolVersion: 1, requestId: 'unknown', success: false,
       error: { code: 'PROTOCOL_MALFORMED', message: err.message },
       timestamp: new Date().toISOString()
-    };
-    process.stdout.write(serializeProtocolMessage(errorResponse));
+    }));
     return;
   }
 
@@ -43,34 +29,74 @@ rl.on('line', async (line) => {
   let success = true;
   let errorPayload;
 
-  // 2. Route to the requested capability pack method
   try {
     if (request.method === 'pack.software.inspect') {
       result = await inspect(request.params?.path || '.');
     } else if (request.method === 'pack.software.verify') {
       result = await verify(request.params?.path || '.', request.params?.scripts || []);
+    } else if (request.method === 'task.run') {
+      const contract = request.params?.contract;
+      if (!contract || !Array.isArray(contract.acceptance)) {
+        throw new Error('Invalid task contract: missing acceptance criteria');
+      }
+      const taskId = contract.taskId || `task-${Date.now()}`;
+      result = { taskId, status: 'accepted' };
+
+      // Fire and forget the progress simulation
+      simulateTaskProgress(taskId, contract).catch(e =>
+        process.stderr.write(`[engine] task simulation error: ${e.message}\n`)
+      );
     } else {
-      throw new CraftError('CAPABILITY_NOT_FOUND', `Unknown method: ${request.method}`);
+      throw new Error(`Unknown method: ${request.method}`);
     }
   } catch (err) {
     success = false;
-    errorPayload = {
-      code: err.code || 'UNKNOWN_ERROR',
-      message: err.message
-    };
+    errorPayload = { code: err.code || 'UNKNOWN_ERROR', message: err.message };
   }
 
-  // 3. Serialize and write the response
-  const response = {
-    protocolVersion: 1,
-    requestId: request.requestId,
-    success,
+  process.stdout.write(serializeProtocolMessage({
+    protocolVersion: 1, requestId: request.requestId, success,
     ...(success ? { result } : { error: errorPayload }),
     timestamp: new Date().toISOString()
-  };
-
-  process.stdout.write(serializeProtocolMessage(response));
+  }));
 });
 
-// Diagnostic log to stderr
+async function simulateTaskProgress(taskId, task) {
+  let seq = 1;
+  const emit = (type, payload) => {
+    try {
+      process.stdout.write(serializeProtocolMessage({
+        protocolVersion: 1, taskId, sequence: seq++,
+        eventId: `evt-${seq}`, type, payload,
+        timestamp: new Date().toISOString()
+      }));
+    } catch (e) {
+      process.stderr.write(`[engine] emit failed: ${e.message}\n`);
+    }
+  };
+
+  emit('task.created', { title: task.title });
+  await sleep(300);
+  emit('task.started', {});
+
+  for (let i = 0; i < task.acceptance.length; i++) {
+    const crit = task.acceptance[i];
+    const stepId = crit.id || `step-${i}`;
+
+    emit('step.queued', { stepId, statement: crit.statement });
+    await sleep(400);
+    emit('step.started', { stepId });
+    await sleep(800 + Math.random() * 1200);
+
+    // 80% chance of success for demo purposes
+    if (Math.random() > 0.2) {
+      emit('step.succeeded', { stepId });
+    } else {
+      emit('step.failed', { stepId, message: 'Simulated criterion failure' });
+    }
+  }
+
+  emit('task.succeeded', {});
+}
+
 process.stderr.write('[engine] Craft Agent headless engine started.\n');

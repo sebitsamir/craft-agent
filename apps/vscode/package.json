@@ -24,8 +24,20 @@
       {
         "command": "craftAgent.verifyWorkspace",
         "title": "Craft Agent: Verify Workspace"
+      },
+      {
+        "command": "craftAgent.runTask",
+        "title": "Craft Agent: Run Task"
       }
-    ]
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "craftAgentTaskProgress",
+          "name": "Craft Agent Progress"
+        }
+      ]
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"
