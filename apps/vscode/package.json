@@ -1,0 +1,28 @@
+{
+  "name": "craft-agent-vscode",
+  "displayName": "Craft Agent",
+  "description": "Universal Creator VS Code Extension",
+  "version": "0.3.0",
+  "publisher": "craft-agent",
+  "type": "module",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onCommand:craftAgent.inspectWorkspace"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "craftAgent.inspectWorkspace",
+        "title": "Craft Agent: Inspect Workspace"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
