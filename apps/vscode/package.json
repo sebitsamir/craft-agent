@@ -5,15 +5,25 @@
   "version": "0.3.0",
   "publisher": "craft-agent",
   "type": "module",
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Other"],
-  "activationEvents": ["onCommand:craftAgent.inspectWorkspace"],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:craftAgent.inspectWorkspace"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "craftAgent.inspectWorkspace",
         "title": "Craft Agent: Inspect Workspace"
+      },
+      {
+        "command": "craftAgent.verifyWorkspace",
+        "title": "Craft Agent: Verify Workspace"
       }
     ]
   },
