@@ -1,9 +1,9 @@
 {
-  "name": "craft-agent-vscode",
-  "displayName": "Craft Agent",
+  "name": "junub-agent-vscode",
+  "displayName": "Junub Agent",
   "description": "Universal Creator VS Code Extension",
   "version": "0.3.0",
-  "publisher": "craft-agent",
+  "publisher": "junub-agent",
   "type": "module",
   "engines": {
     "vscode": "^1.85.0"
@@ -12,29 +12,33 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:craftAgent.inspectWorkspace"
+    "onCommand:junubAgent.inspectWorkspace"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "craftAgent.inspectWorkspace",
-        "title": "Craft Agent: Inspect Workspace"
+        "command": "junubAgent.inspectWorkspace",
+        "title": "Junub Agent: Inspect Workspace"
       },
       {
-        "command": "craftAgent.verifyWorkspace",
-        "title": "Craft Agent: Verify Workspace"
+        "command": "junubAgent.verifyWorkspace",
+        "title": "Junub Agent: Verify Workspace"
       },
       {
-        "command": "craftAgent.runTask",
-        "title": "Craft Agent: Run Task"
+        "command": "junubAgent.runTask",
+        "title": "Junub Agent: Run Task"
+      },
+      {
+        "command": "junubAgent.inspectFilmProject",
+        "title": "Junub Agent: Inspect Film Project"
       }
     ],
     "views": {
       "explorer": [
         {
-          "id": "craftAgentTaskProgress",
-          "name": "Craft Agent Progress"
+          "id": "junubAgentTaskProgress",
+          "name": "Junub Agent Progress"
         }
       ]
     }

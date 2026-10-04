@@ -44,8 +44,8 @@ const STATUS_LABELS: Record<string, string> = {
  */
 export function showVerifyPanel(report: VerifyReport): void {
   const panel = vscode.window.createWebviewPanel(
-    'craftAgentVerify',
-    'Craft Agent: Verify Results',
+    'junubAgentVerify',
+    'Junub Agent: Verify Results',
     vscode.ViewColumn.Beside,
     { enableScripts: false },
   );
@@ -89,7 +89,7 @@ function renderReport(report: VerifyReport): string {
 </style>
 </head>
 <body>
-  <h1>Craft Agent — Verification Results</h1>
+  <h1>Junub Agent — Verification Results</h1>
   <div class="meta">Root: ${escapeHtml(report.root)}<br>Generated: ${escapeHtml(report.generatedAt)}</div>
   <div class="summary ${overallClass}">${overallText}</div>
   <table>
