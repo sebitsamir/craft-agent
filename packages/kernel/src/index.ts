@@ -27,3 +27,5 @@ export * from './patch/apply.js';
 export * from './patch/artifacts.js';
 
 export * from './task-runner.js';
+
+export * from './storage/file-event-store.js';

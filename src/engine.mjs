@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline';
+import path from 'node:path';
 import { inspect } from './lib/inspect.mjs';
 import { verify } from './lib/verify.mjs';
 import { inspectFilmProject, verifyMediaLinks, applyFilmPatch } from '../packs/film/dist/index.js';
@@ -9,20 +10,23 @@ import {
 } from '../packages/contracts/dist/index.js';
 import {
   runTask,
-  InMemoryEventStore,
   InMemoryActionGuard,
+  FileEventStore,
 } from '../packages/kernel/dist/index.js';
 
 const rl = createInterface({ input: process.stdin, terminal: false });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Durable task log location (overridable for tests).
+const TASK_LOG_DIR = process.env.JUNUB_TASK_LOG_DIR || path.join('.junub', 'tasks');
+
 /**
- * A wrapper around InMemoryEventStore that streams every durable event
- * to stdout as a ProtocolEvent so the UI can render real-time progress.
+ * Wraps a durable FileEventStore so every appended event is also streamed
+ * to stdout as a ProtocolEvent for real-time UI progress.
  */
-class StreamingEventStore extends InMemoryEventStore {
-  constructor(emit) {
-    super();
+class StreamingEventStore extends FileEventStore {
+  constructor(filePath, emit) {
+    super(filePath);
     this.emit = emit;
   }
 
@@ -42,7 +46,7 @@ class StreamingEventStore extends InMemoryEventStore {
 }
 
 /**
- * Executes a real task using the kernel TaskRunner, streaming events to the UI.
+ * Executes a real task via the kernel TaskRunner against a durable log.
  */
 async function executeRealTask(taskId, contract) {
   const emit = (evt) => {
@@ -53,20 +57,18 @@ async function executeRealTask(taskId, contract) {
     }
   };
 
-  const eventStore = new StreamingEventStore(emit);
+  const filePath = path.join(TASK_LOG_DIR, `${taskId}.jsonl`);
+  const eventStore = new StreamingEventStore(filePath, emit);
   const actionGuard = new InMemoryActionGuard();
 
-  // Map the contract's acceptance criteria into real executable steps
   const steps = contract.acceptance.map((crit) => ({
     stepId: crit.id || `step-${Math.random().toString(36).slice(2)}`,
     statement: crit.statement,
-    action: async (input, attempt) => {
-      // Simulate real tool/model work (e.g., applying a patch or calling an LLM)
-      await sleep(400 + Math.random() * 600);
-      
-      // Deterministic failure for testing: if the statement contains "fail", it fails
+    action: async () => {
+      // "slow" lets tests control timing deterministically.
+      const delay = crit.statement.includes('slow') ? 3000 : 400;
+      await sleep(delay);
       const success = !crit.statement.toLowerCase().includes('fail');
-      
       return {
         success,
         failureCategory: success ? undefined : 'TERMINAL',
@@ -75,12 +77,7 @@ async function executeRealTask(taskId, contract) {
     },
   }));
 
-  await runTask({
-    taskId,
-    steps,
-    eventStore,
-    actionGuard,
-  });
+  await runTask({ taskId, steps, eventStore, actionGuard });
 }
 
 rl.on('line', async (line) => {
@@ -129,8 +126,7 @@ rl.on('line', async (line) => {
         throw new Error('Invalid task contract: missing acceptance criteria');
       }
       const taskId = contract.taskId || `task-${Date.now()}`;
-      
-      // Send immediate acceptance response to the UI
+
       process.stdout.write(
         serializeProtocolMessage({
           protocolVersion: 1,
@@ -141,11 +137,10 @@ rl.on('line', async (line) => {
         }) + '\n',
       );
 
-      // Fire and forget the real execution (events stream via StreamingEventStore)
       executeRealTask(taskId, contract).catch((e) =>
         process.stderr.write(`[engine] task execution error: ${e.message}\n`),
       );
-      return; // Skip the generic response at the bottom
+      return;
     } else {
       throw new Error(`Unknown method: ${request.method}`);
     }
