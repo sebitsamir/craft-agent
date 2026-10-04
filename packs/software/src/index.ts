@@ -21,3 +21,6 @@ export * from './process.js';
 // Domain checks — exact ports of the v0.3 seed.
 export * from './checks/inspect.js';
 export * from './checks/verify.js';
+
+// Worktree safety (S2).
+export * from './worktree/snapshot.js';
