@@ -13,17 +13,13 @@ import {
   InMemoryActionGuard,
   FileEventStore,
 } from '../packages/kernel/dist/index.js';
+import { makeStepAction } from './lib/actions.mjs';
 
 const rl = createInterface({ input: process.stdin, terminal: false });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Durable task log location (overridable for tests).
 const TASK_LOG_DIR = process.env.JUNUB_TASK_LOG_DIR || path.join('.junub', 'tasks');
 
-/**
- * Wraps a durable FileEventStore so every appended event is also streamed
- * to stdout as a ProtocolEvent for real-time UI progress.
- */
 class StreamingEventStore extends FileEventStore {
   constructor(filePath, emit) {
     super(filePath);
@@ -45,10 +41,7 @@ class StreamingEventStore extends FileEventStore {
   }
 }
 
-/**
- * Executes a real task via the kernel TaskRunner against a durable log.
- */
-async function executeRealTask(taskId, contract) {
+async function executeRealTask(taskId, contract, plan) {
   const emit = (evt) => {
     try {
       process.stdout.write(serializeProtocolMessage(evt) + '\n');
@@ -61,20 +54,18 @@ async function executeRealTask(taskId, contract) {
   const eventStore = new StreamingEventStore(filePath, emit);
   const actionGuard = new InMemoryActionGuard();
 
-  const steps = contract.acceptance.map((crit) => ({
-    stepId: crit.id || `step-${Math.random().toString(36).slice(2)}`,
-    statement: crit.statement,
-    action: async () => {
-      // "slow" lets tests control timing deterministically.
-      const delay = crit.statement.includes('slow') ? 3000 : 400;
-      await sleep(delay);
-      const success = !crit.statement.toLowerCase().includes('fail');
-      return {
-        success,
-        failureCategory: success ? undefined : 'TERMINAL',
-        errorMessage: success ? undefined : 'Simulated criterion failure',
-      };
-    },
+  const plannedSteps = Array.isArray(plan)
+    ? plan
+    : contract.acceptance.map((c) => ({
+        stepId: c.id,
+        statement: c.statement,
+        action: { kind: 'noop', params: { statement: c.statement } },
+      }));
+
+  const steps = plannedSteps.map((s) => ({
+    stepId: s.stepId || s.id || `step-${Math.random().toString(36).slice(2)}`,
+    statement: s.statement || s.stepId || s.id,
+    action: makeStepAction(s.action),
   }));
 
   await runTask({ taskId, steps, eventStore, actionGuard });
@@ -137,7 +128,7 @@ rl.on('line', async (line) => {
         }) + '\n',
       );
 
-      executeRealTask(taskId, contract).catch((e) =>
+      executeRealTask(taskId, contract, request.params?.plan).catch((e) =>
         process.stderr.write(`[engine] task execution error: ${e.message}\n`),
       );
       return;
