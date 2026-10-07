@@ -18,7 +18,10 @@ export class EngineTransport {
     this.rl.on('line', (line) => this.handleLine(line));
 
     this.process.stderr?.on('data', (chunk) => {
-      this.outputChannel.appendLine(`[Engine Stderr] ${chunk.toString().trim()}`);
+      const text = chunk.toString().trim();
+      if (text) {
+        this.outputChannel.appendLine(`[Engine Stderr] ${text}`);
+      }
     });
 
     this.process.on('exit', (code) => {
@@ -29,20 +32,25 @@ export class EngineTransport {
   }
 
   private handleLine(line: string) {
+    // FIX: Ignore empty lines to prevent JSON parse errors on trailing newlines
+    if (!line || !line.trim()) return;
+
     try {
       const msg = JSON.parse(line);
       if ('requestId' in msg) {
         const pending = this.pending.get(msg.requestId);
         if (pending) {
           this.pending.delete(msg.requestId);
-          msg.success ? pending.resolve(msg.result) : pending.reject(new Error(msg.error?.message));
+          msg.success
+            ? pending.resolve(msg.result)
+            : pending.reject(new Error(msg.error?.message || 'Unknown engine error'));
         }
       } else if ('taskId' in msg && 'type' in msg) {
-        // It's a ProtocolEvent
+        // It's a ProtocolEvent (streaming task progress)
         this.events.emit('protocolEvent', msg);
       }
     } catch (err) {
-      this.outputChannel.appendLine(`[Transport] Parse error: ${line}`);
+      this.outputChannel.appendLine(`[Transport] Parse error on line: "${line}"`);
     }
   }
 

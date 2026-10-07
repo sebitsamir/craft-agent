@@ -5,14 +5,15 @@ import { showVerifyPanel, type VerifyReport } from './views/verifyView.js';
 import { showFilmPanel, type FilmReportView } from './views/filmView.js';
 import { FilmTreeProvider } from './views/filmTree.js';
 import { TaskProgressProvider } from './views/taskProgressView.js';
+import { showPlanReviewPanel } from './views/planReviewView.js';
 
 let transport: EngineTransport | undefined;
 let outputChannel: vscode.OutputChannel;
 
 /**
- * Fetches a combined film report (inspect + verify) over the protocol.
- * Shared by the webview command and the sidebar tree command.
- */
+Fetches a combined film report (inspect + verify) over the protocol.
+Shared by the webview command and the sidebar tree command.
+*/
 async function fetchFilmReport(client: EngineTransport, targetPath: string): Promise<FilmReportView> {
   const insp = await client.request('pack.film.inspect', { path: targetPath });
   const ver = await client.request('pack.film.verify', { path: targetPath });
@@ -52,13 +53,19 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(filmView);
 
   transport.onProtocolEvent((evt) => {
+    // DIAGNOSTIC: Log every event so we can see exactly what the engine sends
+    outputChannel.appendLine(`[UI] Event: ${evt.type} | Payload: ${JSON.stringify(evt.payload || {})}`);
+
     if (evt.type === 'task.created') {
       progressProvider.reset();
-    } else if (evt.type.startsWith('step.')) {
-      const stepId = evt.payload.stepId;
+    } else if (evt.type.startsWith('step.') || evt.type === 'task.started' || evt.type === 'task.succeeded') {
+      // Robustly extract stepId and statement (handles both evt.payload.stepId and evt.stepId)
+      const stepId = evt.payload?.stepId || evt.stepId || evt.taskId || 'unknown-step';
       const status = evt.type.split('.')[1];
       const mappedStatus = status === 'started' ? 'running' : status;
-      progressProvider.updateStep(stepId, mappedStatus, evt.payload.statement);
+      const statement = evt.payload?.statement || evt.statement || stepId;
+
+      progressProvider.updateStep(stepId, mappedStatus, statement);
     }
   });
 
@@ -106,7 +113,7 @@ export function activate(context: vscode.ExtensionContext): void {
   });
 
   // ---------------------------------------------------------------------
-  // Command: Run Task
+  // Command: Run Task (Plan -> Review -> Compile -> Execute)
   // ---------------------------------------------------------------------
   const runTaskCmd = vscode.commands.registerCommand('junubAgent.runTask', async () => {
     const uris = await vscode.window.showOpenDialog({
@@ -119,15 +126,68 @@ export function activate(context: vscode.ExtensionContext): void {
     const selectedUri = uris[0];
     if (!selectedUri) return;
 
+    const client = transport;
+    if (!client) {
+      vscode.window.showErrorMessage('Junub Agent engine is not running. Reload the window to restart it.');
+      return;
+    }
+
     try {
-      const content = fs.readFileSync(selectedUri.fsPath, 'utf8');
-      const contract = JSON.parse(content);
+      const fileContent = fs.readFileSync(selectedUri.fsPath, 'utf8');
+      const contract = JSON.parse(fileContent);
       outputChannel.show(true);
-      const res = await transport!.request('task.run', { contract });
+      outputChannel.appendLine(`[UI] Generating plan for task: ${contract.taskId || contract.title}`);
+
+      // 1. Generate Plan
+      const planResult = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'Junub Agent: generating plan...', cancellable: false },
+        () => client.request('task.plan', { contract })
+      ) as any;
+
+      if (planResult.error) {
+        throw new Error(planResult.error.message || 'Plan generation failed');
+      }
+
+      // 2. Show Review UI
+      const review = await showPlanReviewPanel(context, planResult, contract);
+
+      if (!review.approved) {
+        vscode.window.showInformationMessage('Junub Agent: Task execution rejected by user.');
+        return;
+      }
+
+      // If the model refused, there are no steps to compile
+      if (!planResult.steps) {
+        vscode.window.showInformationMessage('Junub Agent: Model refused to plan.');
+        return;
+      }
+
+      // 3. Compile Plan
+      outputChannel.appendLine('[UI] Compiling approved plan...');
+      const targetPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '.';
+      const compileResult = await client.request('task.compile', {
+        plan: planResult,
+        context: {
+          targetPath,
+          domain: contract.domain || 'software',
+          impact: contract.impact || 'low'
+        }
+      }) as any;
+
+      if (compileResult.error) {
+        throw new Error(compileResult.error.message || 'Plan compilation failed (security boundary rejected)');
+      }
+
+      // 4. Execute
+      outputChannel.appendLine('[UI] Executing compiled plan...');
+      const res = await client.request('task.run', { contract, plan: compileResult.steps });
       vscode.window.showInformationMessage(`Task accepted: ${res.taskId}`);
       vscode.commands.executeCommand('junubAgentTaskProgress.focus');
+
     } catch (e: any) {
-      vscode.window.showErrorMessage(`Failed to run task: ${e.message}`);
+      const msg = e.message || String(e);
+      outputChannel.appendLine(`[UI] Task failed: ${msg}`);
+      vscode.window.showErrorMessage(`Failed to run task: ${msg}`);
     }
   });
 
@@ -224,7 +284,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   });
 
-    // ---------------------------------------------------------------------
+  // ---------------------------------------------------------------------
   // Command: Apply Film Patch
   // ---------------------------------------------------------------------
   const applyFilmPatchCmd = vscode.commands.registerCommand('junubAgent.applyFilmPatch', async () => {
@@ -283,7 +343,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   });
 
-    context.subscriptions.push(inspectCmd, verifyCmd, runTaskCmd, inspectFilmCmd, loadFilmCmd, applyFilmPatchCmd);
+  context.subscriptions.push(inspectCmd, verifyCmd, runTaskCmd, inspectFilmCmd, loadFilmCmd, applyFilmPatchCmd);
   outputChannel.appendLine('[UI] Junub Agent extension activated.');
 }
 
