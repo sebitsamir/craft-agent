@@ -1,5 +1,5 @@
 /**
- * Public API for @craft-agent/models.
+ * Public API for @junub-agent/models.
  *
  * This package owns model provider ports, capability routing, and
  * read-only planning. It does NOT own task policy, artifact storage,
@@ -19,6 +19,8 @@ export * from './routing/capability-router.js';
 
 // Deterministic fake provider for testing.
 export * from './adapters/fake-provider.js';
+
+export * from './providers/qwen-provider.js'; 
 
 // Read-only planning layer.
 export * from './planning/read-only-planner.js';
