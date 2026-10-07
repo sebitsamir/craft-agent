@@ -1,13 +1,19 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 import { createInterface } from 'node:readline';
 import path from 'node:path';
+
+// Domain packs
 import { inspect } from './lib/inspect.mjs';
 import { verify } from './lib/verify.mjs';
 import { inspectFilmProject, verifyMediaLinks, applyFilmPatch } from '../packs/film/dist/index.js';
+
+// Protocol & Contracts
 import {
   serializeProtocolMessage,
   parseProtocolMessage,
 } from '../packages/contracts/dist/index.js';
+
+// Kernel Execution
 import {
   runTask,
   InMemoryActionGuard,
@@ -15,9 +21,19 @@ import {
 } from '../packages/kernel/dist/index.js';
 import { makeStepAction } from './lib/actions.mjs';
 
-const rl = createInterface({ input: process.stdin, terminal: false });
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Models (Planning & Routing)
+import {
+  FakeProvider,
+  CapabilityRouter,
+  generateReadOnlyPlan,
+  compilePlan,
+} from '../packages/models/dist/index.js';
 
+// ---------------------------------------------------------------------------
+// Infrastructure
+// ---------------------------------------------------------------------------
+
+const rl = createInterface({ input: process.stdin, terminal: false });
 const TASK_LOG_DIR = process.env.JUNUB_TASK_LOG_DIR || path.join('.junub', 'tasks');
 
 class StreamingEventStore extends FileEventStore {
@@ -111,6 +127,22 @@ rl.on('line', async (line) => {
         request.params?.patch,
         { allowDirty: request.params?.allowDirty === true },
       );
+    } else if (request.method === 'task.plan') {
+      const contract = request.params?.contract;
+      if (!contract || !Array.isArray(contract.acceptance)) {
+        throw new Error('Invalid task contract: missing acceptance criteria');
+      }
+      const provider = new FakeProvider();
+      const router = new CapabilityRouter([provider]);
+      await router.refreshModels();
+      result = await generateReadOnlyPlan(contract, { router });
+    } else if (request.method === 'task.compile') {
+      const plan = request.params?.plan;
+      const context = request.params?.context;
+      if (!plan || !context) {
+        throw new Error('Missing plan or context for compilation');
+      }
+      result = compilePlan(plan, context);
     } else if (request.method === 'task.run') {
       const contract = request.params?.contract;
       if (!contract || !Array.isArray(contract.acceptance)) {
