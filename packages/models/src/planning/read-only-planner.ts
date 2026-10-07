@@ -1,6 +1,6 @@
-import { CraftError, CraftErrorCode } from '@craft-agent/contracts';
-import type { TaskContract } from '@craft-agent/contracts';
-import type { BudgetLimits } from '@craft-agent/kernel';
+import { JunubError, JunubErrorCode } from '@junub-agent/contracts';
+import type { TaskContract } from '@junub-agent/contracts';
+import type { BudgetLimits } from '@junub-agent/kernel';
 import type {
   ModelCompletionRequest,
   ModelMessage,
@@ -68,6 +68,15 @@ export interface ReadOnlyPlanStep {
 
   /** Dependencies: step IDs that must complete before this one. */
   readonly dependsOn?: readonly string[];
+
+  /**
+   * Optional patch PROPOSED by the model (E4).
+   *
+   * This is a proposal only — it never executes in the planner. The
+   * plan-to-execution bridge validates it against the kernel patch model
+   * before it may become an executable step.
+   */
+  readonly proposedPatch?: unknown;
 }
 
 /**
@@ -184,12 +193,13 @@ export async function generateReadOnlyPlan(
  */
 function buildPlanningPrompt(task: TaskContract): readonly ModelMessage[] {
   const systemPrompt = `[scenario:simple-plan]
-You are a read-only planning assistant for Craft Agent.
+You are a read-only planning assistant for Junub Agent.
 You MUST NOT propose any file writes, tool executions, or external mutations.
 You MUST cite sources for every step.
 You MUST respond with a JSON object containing a "plan" array.
 Each step must have: stepId, action, description, readOnly (must be true), sources, estimatedModelCalls.
-If you cannot plan this task, respond with a "refusal" object explaining why.`;
+If you cannot plan this task, respond with a "refusal" object explaining why.
+If a step requires a file mutation, set action to "apply_patch", keep readOnly true, and include the complete patch object in a "patch" field. The runtime validates every patch before execution; unvalidated patches are rejected.`;
 
   const userPrompt = `Task: ${task.title}
 Intent: ${task.intent}
@@ -218,16 +228,16 @@ function parsePlanResponse(
   try {
     parsed = JSON.parse(content);
   } catch {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_TASK_CONTRACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_TASK_CONTRACT,
       `Model returned invalid JSON for task "${taskId}". The plan cannot be trusted.`,
       { rawContent: content.slice(0, 500) },
     );
   }
 
   if (typeof parsed !== 'object' || parsed === null) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_TASK_CONTRACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_TASK_CONTRACT,
       'Model plan response must be a JSON object.',
     );
   }
@@ -248,8 +258,8 @@ function parsePlanResponse(
 
   // Parse plan steps.
   if (!Array.isArray(obj.plan)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_TASK_CONTRACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_TASK_CONTRACT,
       'Model plan response must contain a "plan" array.',
     );
   }
@@ -258,22 +268,22 @@ function parsePlanResponse(
     const step = rawStep as Record<string, unknown>;
 
     if (typeof step.stepId !== 'string' || step.stepId.trim().length === 0) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         `Plan step ${index} must have a nonempty "stepId".`,
       );
     }
 
     if (typeof step.action !== 'string' || step.action.trim().length === 0) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         `Plan step ${index} must have a nonempty "action".`,
       );
     }
 
     if (typeof step.description !== 'string' || step.description.trim().length === 0) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         `Plan step ${index} must have a nonempty "description".`,
       );
     }
@@ -283,8 +293,8 @@ function parsePlanResponse(
       ? step.sources.map((rawSource, sourceIndex) => {
         const source = rawSource as Record<string, unknown>;
         if (typeof source.uri !== 'string' || source.uri.trim().length === 0) {
-          throw new CraftError(
-            CraftErrorCode.MALFORMED_TASK_CONTRACT,
+          throw new JunubError(
+            JunubErrorCode.MALFORMED_TASK_CONTRACT,
             `Plan step ${index} source ${sourceIndex} must have a nonempty "uri".`,
           );
         }
@@ -318,6 +328,7 @@ function parsePlanResponse(
       sources,
       estimatedModelCalls: typeof step.estimatedModelCalls === 'number' ? step.estimatedModelCalls : 1,
       dependsOn: Array.isArray(step.dependsOn) ? step.dependsOn.map(String) : undefined,
+      proposedPatch: step.patch !== undefined ? step.patch : undefined,
     };
   });
 
@@ -335,8 +346,8 @@ function enforceReadOnly(steps: readonly ReadOnlyPlanStep[]): void {
 
   if (mutatingSteps.length > 0) {
     const stepIds = mutatingSteps.map((s) => s.stepId).join(', ');
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_TASK_CONTRACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_TASK_CONTRACT,
       `Read-only planner rejected ${mutatingSteps.length} mutating step(s): [${stepIds}]. F3 plans must be strictly read-only.`,
       { mutatingStepIds: mutatingSteps.map((s) => s.stepId) },
     );
@@ -354,8 +365,8 @@ function enforceReadOnly(steps: readonly ReadOnlyPlanStep[]): void {
 
   if (dangerousSteps.length > 0) {
     const stepIds = dangerousSteps.map((s) => s.stepId).join(', ');
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_TASK_CONTRACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_TASK_CONTRACT,
       `Read-only planner rejected dangerous action(s) in step(s): [${stepIds}]. These actions are never allowed in planning mode.`,
       { dangerousStepIds: dangerousSteps.map((s) => s.stepId) },
     );
@@ -381,8 +392,8 @@ function enforceBudgetBounds(
   );
 
   if (limits.maxModelCalls !== undefined && totalModelCalls > limits.maxModelCalls) {
-    throw new CraftError(
-      CraftErrorCode.BUDGET_EXCEEDED,
+    throw new JunubError(
+      JunubErrorCode.BUDGET_EXCEEDED,
       `Plan requires ${totalModelCalls} model calls but budget allows only ${limits.maxModelCalls}. Reduce plan scope or increase budget.`,
       {
         estimatedModelCalls: totalModelCalls,

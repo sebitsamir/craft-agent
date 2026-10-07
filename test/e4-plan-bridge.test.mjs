@@ -73,7 +73,8 @@ describe('E4 Slice 1: Plan-to-Execution Bridge', () => {
       (err) => {
         assert.ok(err instanceof JunubError);
         assert.equal(err.code, 'MALFORMED_TASK_CONTRACT');
-        assert.ok(err.message.includes('validated patch'));
+        // Accept either the old or new wording
+        assert.ok(err.message.includes('carries no patch payload') || err.message.includes('validated patch'));
         return true;
       },
     );

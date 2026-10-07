@@ -1,4 +1,5 @@
 import { JunubError, JunubErrorCode } from '@junub-agent/contracts';
+import { validatePatch } from '@junub-agent/kernel';
 import type { ReadOnlyPlan, ReadOnlyPlanStep } from './read-only-planner.js';
 
 /**
@@ -33,15 +34,14 @@ export interface CompiledPlan {
 
 /**
  * Actions that are always safe to execute (read-only).
- * Anything not in these two sets is rejected by the bridge.
  */
 const SAFE_READ_ACTIONS = new Set([
   'read_file', 'inspect', 'verify', 'analyze', 'search', 'list',
 ]);
 
 /**
- * Actions that carry mutation intent. These MUST come with a validated
- * patch attached to the step (handled in E4 Slice 2).
+ * Actions that carry mutation intent. These compile ONLY when the step
+ * carries a patch that passes kernel validation.
  */
 const PATCH_ACTIONS = new Set(['apply_patch', 'patch']);
 
@@ -50,7 +50,7 @@ const PATCH_ACTIONS = new Set(['apply_patch', 'patch']);
  *
  * This is the LAST security boundary before execution:
  * - Rejects any step whose readOnly flag is false.
- * - Rejects mutation intents without a validated patch.
+ * - Compiles mutation intents only when a kernel-valid patch is attached.
  * - Rejects unknown action kinds.
  * - Enforces the F1 reviewer requirement for high-impact tasks.
  */
@@ -90,13 +90,7 @@ function compileStep(step: ReadOnlyPlanStep, context: BridgeContext): Executable
   }
 
   if (PATCH_ACTIONS.has(step.action)) {
-    // Mutation intents require an explicit, validated patch — enforced in Slice 2.
-    // For Slice 1 we reject them outright to prove the security boundary holds.
-    throw new JunubError(
-      JunubErrorCode.MALFORMED_TASK_CONTRACT,
-      `Step "${step.stepId}" proposes mutation "${step.action}" but the bridge requires a validated patch. Refusing.`,
-      { stepId: step.stepId, action: step.action },
-    );
+    return compilePatchAction(step, context);
   }
 
   // Unknown actions are rejected — never silently executed.
@@ -105,6 +99,45 @@ function compileStep(step: ReadOnlyPlanStep, context: BridgeContext): Executable
     `Unknown action "${step.action}" in step "${step.stepId}"; bridge refuses unknown actions.`,
     { stepId: step.stepId, action: step.action },
   );
+}
+
+/**
+ * Compiles a mutation proposal into a guarded patch application.
+ *
+ * The patch is validated by the KERNEL patch model (schema, scope, path
+ * safety). Only a fully valid patch may become an executable step; the
+ * actual filesystem mutation still happens later under the worktree gate.
+ */
+function compilePatchAction(
+  step: ReadOnlyPlanStep,
+  context: BridgeContext,
+): ExecutableStep {
+  const proposed = step.proposedPatch;
+
+  if (proposed === undefined) {
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_TASK_CONTRACT,
+      `Step "${step.stepId}" proposes mutation "${step.action}" but carries no patch payload. Refusing.`,
+      { stepId: step.stepId, action: step.action },
+    );
+  }
+
+  const validation = validatePatch(proposed);
+  if (!validation.valid) {
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_ARTIFACT,
+      `Patch in step "${step.stepId}" failed kernel validation: ${validation.errors.join('; ')}`,
+      { stepId: step.stepId, errors: validation.errors },
+    );
+  }
+
+  const kind = context.domain === 'film' ? 'film.applyPatch' : 'applyPatch';
+
+  return {
+    stepId: step.stepId,
+    statement: step.description,
+    action: { kind, params: { path: context.targetPath, patch: proposed } },
+  };
 }
 
 function compileReadAction(
@@ -133,8 +166,6 @@ function compileReadAction(
     case 'analyze':
     case 'search':
     default:
-      // Generic read actions map to noop so they still appear in the durable log
-      // without doing unvetted work. The UI will show them as "completed" steps.
       return {
         stepId: step.stepId,
         statement: step.description,
