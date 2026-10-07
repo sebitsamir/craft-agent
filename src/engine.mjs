@@ -23,11 +23,11 @@ import { makeStepAction } from './lib/actions.mjs';
 
 // Models (Planning & Routing)
 import {
-  FakeProvider,
   CapabilityRouter,
   generateReadOnlyPlan,
   compilePlan,
 } from '../packages/models/dist/index.js';
+import { selectModelProvider } from './lib/providers.mjs';
 
 // ---------------------------------------------------------------------------
 // Infrastructure
@@ -73,10 +73,10 @@ async function executeRealTask(taskId, contract, plan) {
   const plannedSteps = Array.isArray(plan)
     ? plan
     : contract.acceptance.map((c) => ({
-        stepId: c.id,
-        statement: c.statement,
-        action: { kind: 'noop', params: { statement: c.statement } },
-      }));
+      stepId: c.id,
+      statement: c.statement,
+      action: { kind: 'noop', params: { statement: c.statement } },
+    }));
 
   const steps = plannedSteps.map((s) => ({
     stepId: s.stepId || s.id || `step-${Math.random().toString(36).slice(2)}`,
@@ -132,7 +132,8 @@ rl.on('line', async (line) => {
       if (!contract || !Array.isArray(contract.acceptance)) {
         throw new Error('Invalid task contract: missing acceptance criteria');
       }
-      const provider = new FakeProvider();
+      const { provider, source } = selectModelProvider();
+      process.stderr.write(`[engine] task.plan using provider: ${source}\n`);
       const router = new CapabilityRouter([provider]);
       await router.refreshModels();
       result = await generateReadOnlyPlan(contract, { router });

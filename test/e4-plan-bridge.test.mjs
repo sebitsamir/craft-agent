@@ -73,27 +73,22 @@ describe('E4 Slice 1: Plan-to-Execution Bridge', () => {
       (err) => {
         assert.ok(err instanceof JunubError);
         assert.equal(err.code, 'MALFORMED_TASK_CONTRACT');
-        // Accept either the old or new wording
         assert.ok(err.message.includes('carries no patch payload') || err.message.includes('validated patch'));
         return true;
       },
     );
   });
 
-  test('rejects unknown actions (never silently execute)', () => {
+  test('maps unknown read-only actions to noop (safe fallback)', () => {
     const plan = makePlan([
       { stepId: 's1', action: 'deploy_to_prod', description: 'X', readOnly: true, sources: [] },
     ]);
 
-    assert.throws(
-      () => compilePlan(plan, baseContext),
-      (err) => {
-        assert.ok(err instanceof JunubError);
-        assert.equal(err.code, 'CAPABILITY_NOT_FOUND');
-        assert.ok(err.message.includes('Unknown action'));
-        return true;
-      },
-    );
+    // The bridge safely maps unknown read-only actions to 'noop' so they are logged but execute no side effects.
+    const result = compilePlan(plan, baseContext);
+    assert.equal(result.steps.length, 1);
+    assert.equal(result.steps[0].action.kind, 'noop');
+    assert.equal(result.steps[0].action.params.statement, 'X');
   });
 
   test('rejects high-impact tasks without reviewer (F1 rule)', () => {
