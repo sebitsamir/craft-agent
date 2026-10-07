@@ -36,7 +36,47 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(outputChannel);
 
   const enginePath = context.asAbsolutePath('../../src/engine.mjs');
-  transport = new EngineTransport(enginePath, outputChannel);
+
+  // E5: read Qwen-compatible provider settings and inject into engine env.
+  const junubConfig = vscode.workspace.getConfiguration('junubAgent');
+  const apiKey = junubConfig.get<string>('dashscopeApiKey');
+  const baseUrl = junubConfig.get<string>('qwenBaseUrl');
+  const model = junubConfig.get<string>('qwenModel');
+
+  const extraEnv: Record<string, string> = {};
+  if (apiKey && apiKey.trim()) {
+    extraEnv.DASHSCOPE_API_KEY = apiKey.trim();
+    if (baseUrl && baseUrl.trim()) {
+      extraEnv.QWEN_BASE_URL = baseUrl.trim();
+    }
+    if (model && model.trim()) {
+      extraEnv.QWEN_MODEL = model.trim();
+    }
+    outputChannel.appendLine(`[UI] Qwen-compatible provider configured — base: ${baseUrl || 'DashScope default'}, model: ${model || 'qwen-max'}`);
+  } else {
+    outputChannel.appendLine('[UI] No Qwen API key configured — engine will use the offline FakeProvider.');
+  }
+
+  transport = new EngineTransport(enginePath, outputChannel, extraEnv);
+
+  // Reload prompt when settings change
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (
+        e.affectsConfiguration('junubAgent.dashscopeApiKey') ||
+        e.affectsConfiguration('junubAgent.qwenBaseUrl') ||
+        e.affectsConfiguration('junubAgent.qwenModel')
+      ) {
+        vscode.window
+          .showInformationMessage('Junub Agent: reload the window to apply the new provider settings.', 'Reload')
+          .then((choice) => {
+            if (choice === 'Reload') {
+              vscode.commands.executeCommand('workbench.action.reloadWindow');
+            }
+          });
+      }
+    }),
+  );
 
   // Task progress tree view
   const progressProvider = new TaskProgressProvider();

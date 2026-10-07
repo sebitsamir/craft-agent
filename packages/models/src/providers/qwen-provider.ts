@@ -1,7 +1,6 @@
 import { JunubError, JunubErrorCode } from '@junub-agent/contracts';
 import type {
   ModelProvider,
-  ModelCapability,
   ModelDescriptor,
   ModelMessage,
   ModelCompletionRequest,
@@ -9,32 +8,26 @@ import type {
   ModelUsage,
 } from '../ports/model-provider.js';
 
-/**
- * Configuration for the Qwen Provider.
- */
 export interface QwenProviderConfig {
   readonly apiKey: string;
+  readonly model?: string;
   readonly baseUrl?: string;
   readonly timeoutMs?: number;
   readonly maxRetries?: number;
 }
 
-/**
- * Production-grade Qwen Model Provider (via DashScope API).
- *
- * Implements the ModelProvider port using the OpenAI-compatible DashScope endpoint.
- * Features strict typing, request timeouts, and bounded exponential backoff.
- */
 export class QwenProvider implements ModelProvider {
   readonly providerId = 'qwen';
 
   private readonly apiKey: string;
+  private readonly model: string;
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly maxRetries: number;
 
   constructor(config: QwenProviderConfig) {
     this.apiKey = config.apiKey;
+    this.model = config.model || 'qwen-max';
     this.baseUrl = config.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
     this.timeoutMs = config.timeoutMs ?? 30000;
     this.maxRetries = config.maxRetries ?? 3;
@@ -45,7 +38,29 @@ export class QwenProvider implements ModelProvider {
   }
 
   async listModels(): Promise<readonly ModelDescriptor[]> {
-    // Advertises the core Qwen models available via DashScope
+    // FIX: Detect if we are using a custom model (like OpenRouter)
+    const isCustomModel = !['qwen-max', 'qwen-plus', 'qwen-turbo'].includes(this.model);
+
+    const customDescriptor: ModelDescriptor = {
+      modelId: this.model,
+      displayName: this.model,
+      providerId: 'qwen',
+      capabilities: ['reasoning', 'tool_use', 'code_generation', 'summarization', 'citation'],
+      maxContextTokens: 131072,
+      maxOutputTokens: 8192,
+      costPerInputMillionTokens: 1.0,
+      costPerOutputMillionTokens: 3.0,
+      privacyDestination: 'provider_cloud',
+      supportsToolUse: true,
+      supportsStreaming: true,
+    };
+
+    // If using a custom model or OpenRouter, ONLY advertise the custom model
+    if (isCustomModel || this.baseUrl.includes('openrouter')) {
+      return [customDescriptor];
+    }
+
+    // Otherwise, advertise the default DashScope models
     return [
       {
         modelId: 'qwen-max',
@@ -99,8 +114,6 @@ export class QwenProvider implements ModelProvider {
 
     const startTime = Date.now();
     const url = `${this.baseUrl}/chat/completions`;
-
-    // Map our internal port messages to the OpenAI-compatible API format
     const messages = this.mapMessages(request.messages);
 
     const body = {
@@ -147,7 +160,6 @@ export class QwenProvider implements ModelProvider {
         const inputTokens = usage.prompt_tokens || 0;
         const outputTokens = usage.completion_tokens || 0;
 
-        // Calculate estimated cost based on the requested model (fallback to qwen-max pricing)
         const costPerIn = request.modelId.includes('turbo') ? 0.4 : request.modelId.includes('plus') ? 0.8 : 2.0;
         const costPerOut = request.modelId.includes('turbo') ? 1.2 : request.modelId.includes('plus') ? 2.0 : 6.0;
         const estimatedCostUsd = ((inputTokens / 1000000) * costPerIn) + ((outputTokens / 1000000) * costPerOut);
@@ -174,7 +186,6 @@ export class QwenProvider implements ModelProvider {
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
 
-        // Only retry on transient errors (Timeout or 5xx Server Errors)
         const isTransient =
           lastError.name === 'AbortError' ||
           (lastError instanceof JunubError && lastError.message.includes('Qwen API error (5'));
@@ -183,7 +194,6 @@ export class QwenProvider implements ModelProvider {
           throw lastError;
         }
 
-        // Exponential backoff
         const delayMs = Math.pow(2, attempt - 1) * 1000;
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
@@ -192,15 +202,10 @@ export class QwenProvider implements ModelProvider {
     throw lastError || new Error('Unknown Qwen generation failure');
   }
 
-  // ---------------------------------------------------------------------------
-  // Private Helpers
-  // ---------------------------------------------------------------------------
-
   private mapMessages(messages: readonly ModelMessage[]): any[] {
     return messages.map(m => {
       const msg: any = { role: m.role, content: m.content };
 
-      // Map assistant tool calls to OpenAI format
       if (m.role === 'assistant' && m.toolCalls) {
         msg.tool_calls = m.toolCalls.map(tc => ({
           id: tc.id,
@@ -209,7 +214,6 @@ export class QwenProvider implements ModelProvider {
         }));
       }
 
-      // Map tool results to OpenAI format
       if (m.role === 'tool' && m.toolResult) {
         msg.tool_call_id = m.toolResult.toolCallId;
       }

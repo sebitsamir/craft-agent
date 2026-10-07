@@ -10,9 +10,17 @@ export class EngineTransport {
   private reqCounter = 0;
   private events = new EventEmitter();
 
-  constructor(enginePath: string, private outputChannel: vscode.OutputChannel) {
+  constructor(
+    enginePath: string,
+    private outputChannel: vscode.OutputChannel,
+    extraEnv?: Record<string, string>,
+  ) {
     this.outputChannel.appendLine(`[Transport] Spawning engine: node ${enginePath}`);
-    this.process = spawn('node', [enginePath], { stdio: ['pipe', 'pipe', 'pipe'] });
+    this.process = spawn('node', [enginePath], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      // Inherit the parent environment, then layer in any injected keys (e.g. DASHSCOPE_API_KEY).
+      env: { ...process.env, ...(extraEnv ?? {}) },
+    });
 
     this.rl = createInterface({ input: this.process.stdout!, terminal: false });
     this.rl.on('line', (line) => this.handleLine(line));
@@ -32,7 +40,6 @@ export class EngineTransport {
   }
 
   private handleLine(line: string) {
-    // FIX: Ignore empty lines to prevent JSON parse errors on trailing newlines
     if (!line || !line.trim()) return;
 
     try {
@@ -46,7 +53,6 @@ export class EngineTransport {
             : pending.reject(new Error(msg.error?.message || 'Unknown engine error'));
         }
       } else if ('taskId' in msg && 'type' in msg) {
-        // It's a ProtocolEvent (streaming task progress)
         this.events.emit('protocolEvent', msg);
       }
     } catch (err) {

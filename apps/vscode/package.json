@@ -37,7 +37,10 @@
         "command": "junubAgent.loadFilmProject",
         "title": "Junub Agent: Load Film Project"
       },
-            { "command": "junubAgent.applyFilmPatch", "title": "Junub Agent: Apply Film Patch" }
+      {
+        "command": "junubAgent.applyFilmPatch",
+        "title": "Junub Agent: Apply Film Patch"
+      }
     ],
     "views": {
       "explorer": [
@@ -50,6 +53,29 @@
           "name": "Junub Agent Film"
         }
       ]
+    },
+        "configuration": {
+      "title": "Junub Agent",
+      "properties": {
+        "junubAgent.dashscopeApiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "API key for the Qwen-compatible provider. Works with DashScope, OpenRouter, Together AI, etc.",
+          "order": 1
+        },
+        "junubAgent.qwenBaseUrl": {
+          "type": "string",
+          "default": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+          "markdownDescription": "Base URL for the Qwen-compatible API. Change to `https://openrouter.ai/api/v1` for OpenRouter.",
+          "order": 2
+        },
+        "junubAgent.qwenModel": {
+          "type": "string",
+          "default": "qwen-max",
+          "markdownDescription": "Model ID to use. For OpenRouter use `qwen/qwen-2.5-72b-instruct` or `qwen/qwen-turbo`.",
+          "order": 3
+        }
+      }
     }
   },
   "scripts": {

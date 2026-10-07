@@ -3,19 +3,20 @@ import { FakeProvider, QwenProvider } from '../../packages/models/dist/index.js'
 /**
  * Selects the model provider for planning based on environment configuration.
  *
- * Returns the real QwenProvider when an API key is available, otherwise
- * falls back to the deterministic FakeProvider for offline/test use.
+ * Supports any OpenAI-compatible provider (DashScope, OpenRouter, Together AI,
+ * local Ollama, etc.) by reading apiKey, baseUrl, and model from env.
  *
- * The kernel and planner never know which one was chosen — they only see
- * the ModelProvider port. This keeps provider isolation intact.
+ * Falls back to the deterministic FakeProvider when no key is configured.
  */
 export function selectModelProvider(env = process.env) {
   const apiKey = env.DASHSCOPE_API_KEY || env.QWEN_API_KEY;
 
   if (apiKey) {
+    const baseUrl = env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+    const model = env.QWEN_MODEL || 'qwen-max';
     return {
-      provider: new QwenProvider({ apiKey, timeoutMs: 30000 }),
-      source: 'qwen',
+      provider: new QwenProvider({ apiKey, baseUrl, model, timeoutMs: 30000 }),
+      source: `qwen@${baseUrl} (${model})`,
     };
   }
 
