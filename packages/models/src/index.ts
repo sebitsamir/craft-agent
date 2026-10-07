@@ -20,7 +20,8 @@ export * from './routing/capability-router.js';
 // Deterministic fake provider for testing.
 export * from './adapters/fake-provider.js';
 
-export * from './providers/qwen-provider.js'; 
+export * from './providers/qwen-provider.js';
 
 // Read-only planning layer.
 export * from './planning/read-only-planner.js';
+export * from './planning/plan-bridge.js';
