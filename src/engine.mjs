@@ -163,7 +163,109 @@ rl.on('line', async (line) => {
         request.params?.patch,
         { allowDirty: request.params?.allowDirty === true },
       );
-    } else if (request.method === 'task.plan') {
+    } else if (request.method === 'chat.query') {
+      const { message, history, workspaceContext } = request.params || {};
+      if (!message) throw new Error('Missing message');
+
+      const { provider, source, model } = selectModelProvider();
+      const router = new CapabilityRouter([provider]);
+      await router.refreshModels();
+
+      const historyText = history && history.length > 0
+        ? history.map(function (h) { return h.role + ': ' + h.content; }).join('\n')
+        : '';
+
+      const systemContent = 'You are Junub Agent, an expert software engineer working inside a VS Code workspace. ' +
+        'You have access to the workspace structure and files provided below. ' +
+        'Answer the user question accurately using ONLY the real files and context provided. ' +
+        'Never hallucinate file paths or invent files that do not exist. ' +
+        'If you reference a file, use its exact path from the workspace context. ' +
+        'Be specific, technical, and concise. Use markdown formatting for readability.';
+
+      const userContent = 'WORKSPACE CONTEXT:\n' + (workspaceContext || 'No workspace open.') +
+        '\n\nCONVERSATION HISTORY:\n' + (historyText || 'No previous messages.') +
+        '\n\nUSER QUESTION:\n' + message;
+
+      const response = await provider.complete({
+        modelId: model || 'qwen2.5:3b',
+        messages: [
+          { role: 'system', content: systemContent },
+          { role: 'user', content: userContent }
+        ],
+        temperature: 0.2,
+        maxOutputTokens: 2048,
+      });
+
+      result = { response: response.content, modelUsed: model || 'unknown' };
+
+    }
+    else if (request.method === 'task.refine') {
+      const { message, history, workspaceContext } = request.params || {};
+      if (!message) throw new Error('Missing message for refinement');
+
+      const { provider, source, model } = selectModelProvider();
+      const router = new CapabilityRouter([provider]);
+      await router.refreshModels();
+
+      const historyText = history && history.length > 0
+        ? `Previous context:\n${history.map(h => `${h.role}: ${h.content}`).join('\n')}`
+        : 'No previous context.';
+
+      // Inject the real workspace context into the prompt
+      const contextBlock = workspaceContext
+        ? `\n\nCURRENT WORKSPACE CONTEXT (Use these exact paths, folders, and technologies. DO NOT hallucinate fake files):\n${workspaceContext}`
+        : '';
+
+      const refinePrompt = [
+        {
+          role: 'system', content: `You are an AI agent coordinator. Convert the user's request into a JSON object.
+You MUST output ONLY valid JSON. No markdown, no explanations.
+${contextBlock}
+
+If the request is clear and actionable, output this EXACT structure:
+{
+  "contract": {
+    "taskId": "chat-1",
+    "title": "Short Title",
+    "intent": "Clear intent based on context",
+    "domain": "software",
+    "impact": "low",
+    "outputs": [],
+    "acceptance": [
+      { "id": "a1", "statement": "First measurable criterion using real file names from context" }
+    ]
+  }
+}
+
+If the request is too vague even with context, output this EXACT structure:
+{
+  "question": "What specific part should I focus on?"
+}` },
+        { role: 'user', content: `${historyText}\n\nUser request: ${message}` }
+      ];
+
+      const response = await provider.complete({
+        modelId: model || 'qwen2.5:3b',
+        messages: refinePrompt,
+        temperature: 0.1,
+        maxOutputTokens: 512,
+      });
+
+      let cleaned = response.content.trim();
+      if (cleaned.startsWith('```json')) {
+        cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (cleaned.startsWith('```')) {
+        cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+
+      try {
+        result = JSON.parse(cleaned);
+        process.stderr.write('[engine] task.refine RAW OUTPUT: ' + cleaned + '\n');
+      } catch (err) {
+        throw new Error(`Failed to parse refinement JSON: ${err.message}. Raw: ${cleaned.slice(0, 200)}`);
+      }
+    }
+    else if (request.method === 'task.plan') {
       const contract = request.params?.contract;
       if (!contract || !Array.isArray(contract.acceptance)) {
         throw new Error('Invalid task contract: missing acceptance criteria');
@@ -184,7 +286,8 @@ rl.on('line', async (line) => {
         plan: result.steps || null,
         refusal: result.reason ? { reason: result.reason, message: result.message, suggestedNextAction: result.suggestedNextAction } : null
       });
-    } else if (request.method === 'task.compile') {
+    }
+    else if (request.method === 'task.compile') {
       const plan = request.params?.plan;
       const context = request.params?.context;
       if (!plan || !context) {
