@@ -89,10 +89,10 @@ async function executeRealTask(taskId, contract, plan) {
   const plannedSteps = Array.isArray(plan)
     ? plan
     : contract.acceptance.map((c) => ({
-        stepId: c.id,
-        statement: c.statement,
-        action: { kind: 'noop', params: { statement: c.statement } },
-      }));
+      stepId: c.id,
+      statement: c.statement,
+      action: { kind: 'noop', params: { statement: c.statement } },
+    }));
 
   const steps = plannedSteps.map((s) => ({
     stepId: s.stepId || s.id || 'step-' + Math.random().toString(36).slice(2),
@@ -107,7 +107,8 @@ async function executeRealTask(taskId, contract, plan) {
       taskId,
       event: 'task_completed',
       contract: { title: contract.title, intent: contract.intent, domain: contract.domain },
-      status: 'succeeded'
+      status: 'succeeded',
+      executedSteps: steps.map(function (s) { return { stepId: s.stepId, statement: s.statement, kind: s.action.kind }; })
     });
   } catch (err) {
     process.stderr.write('[engine] task execution error: ' + err.message + '\n');
@@ -172,14 +173,16 @@ rl.on('line', async (line) => {
       const router = new CapabilityRouter([provider]);
       await router.refreshModels();
       result = await generateReadOnlyPlan(contract, { router });
-      
+
       await logHistory({
         timestamp: new Date().toISOString(),
         taskId: contract.taskId || 'unknown',
         event: 'plan_generated',
         contract: { title: contract.title, intent: contract.intent, domain: contract.domain },
         planStepsCount: result.steps ? result.steps.length : 0,
-        modelUsed: result.modelUsed || source
+        modelUsed: result.modelUsed || source,
+        plan: result.steps || null,
+        refusal: result.reason ? { reason: result.reason, message: result.message, suggestedNextAction: result.suggestedNextAction } : null
       });
     } else if (request.method === 'task.compile') {
       const plan = request.params?.plan;
