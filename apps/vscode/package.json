@@ -40,7 +40,11 @@
       {
         "command": "junubAgent.applyFilmPatch",
         "title": "Junub Agent: Apply Film Patch"
-      }
+      },
+      {
+      "command": "junubAgent.viewHistory",
+      "title": "Junub Agent: View Task History"
+    }
     ],
     "views": {
       "explorer": [
@@ -57,22 +61,29 @@
         "configuration": {
       "title": "Junub Agent",
       "properties": {
+        "junubAgent.provider": {
+          "type": "string",
+          "enum": ["dashscope", "openrouter", "ollama"],
+          "default": "dashscope",
+          "markdownDescription": "The LLM provider to use for planning.",
+          "order": 0
+        },
         "junubAgent.dashscopeApiKey": {
           "type": "string",
           "default": "",
-          "markdownDescription": "API key for the Qwen-compatible provider. Works with DashScope, OpenRouter, Together AI, etc.",
+          "markdownDescription": "API key for the provider. Required for DashScope and OpenRouter. Can be left empty for local Ollama.",
           "order": 1
         },
         "junubAgent.qwenBaseUrl": {
           "type": "string",
           "default": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-          "markdownDescription": "Base URL for the Qwen-compatible API. Change to `https://openrouter.ai/api/v1` for OpenRouter.",
+          "markdownDescription": "Base URL for the API. Auto-set by the Provider dropdown, but can be overridden.",
           "order": 2
         },
         "junubAgent.qwenModel": {
           "type": "string",
           "default": "qwen-max",
-          "markdownDescription": "Model ID to use. For OpenRouter use `qwen/qwen-2.5-72b-instruct` or `qwen/qwen-turbo`.",
+          "markdownDescription": "Model ID to use. For Ollama, use 'qwen2.5' or 'qwen2.5:14b'. For OpenRouter, use 'qwen/qwen-2.5-72b-instruct'.",
           "order": 3
         }
       }

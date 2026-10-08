@@ -1,22 +1,22 @@
 import { FakeProvider, QwenProvider } from '../../packages/models/dist/index.js';
 
-/**
- * Selects the model provider for planning based on environment configuration.
- *
- * Supports any OpenAI-compatible provider (DashScope, OpenRouter, Together AI,
- * local Ollama, etc.) by reading apiKey, baseUrl, and model from env.
- *
- * Falls back to the deterministic FakeProvider when no key is configured.
- */
 export function selectModelProvider(env = process.env) {
   const apiKey = env.DASHSCOPE_API_KEY || env.QWEN_API_KEY;
+  const baseUrl = env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+  const model = env.QWEN_MODEL || 'qwen-max';
 
-  if (apiKey) {
-    const baseUrl = env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-    const model = env.QWEN_MODEL || 'qwen-max';
+  const isLocal = baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1');
+
+  if (apiKey || isLocal) {
     return {
-      provider: new QwenProvider({ apiKey, baseUrl, model, timeoutMs: 30000 }),
-      source: `qwen@${baseUrl} (${model})`,
+      // Ollama doesn't strictly need a key, but passing 'ollama' satisfies the header requirement safely
+      provider: new QwenProvider({
+        apiKey: apiKey || 'ollama',
+        baseUrl,
+        model,
+        timeoutMs: isLocal ? 120000 : 30000 // Give local models more time to respond
+      }),
+      source: isLocal ? 'ollama (local)' : `qwen@${baseUrl} (${model})`,
     };
   }
 

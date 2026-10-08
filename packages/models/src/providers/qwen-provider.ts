@@ -34,33 +34,46 @@ export class QwenProvider implements ModelProvider {
   }
 
   async isAvailable(): Promise<boolean> {
-    return !!this.apiKey;
+    const isLocal = this.baseUrl.includes('localhost') || this.baseUrl.includes('127.0.0.1');
+    return !!(this.apiKey || isLocal);
   }
 
   async listModels(): Promise<readonly ModelDescriptor[]> {
-    // FIX: Detect if we are using a custom model (like OpenRouter)
-    const isCustomModel = !['qwen-max', 'qwen-plus', 'qwen-turbo'].includes(this.model);
+    const isLocal = this.baseUrl.includes('localhost') || this.baseUrl.includes('127.0.0.1');
 
-    const customDescriptor: ModelDescriptor = {
-      modelId: this.model,
-      displayName: this.model,
-      providerId: 'qwen',
-      capabilities: ['reasoning', 'tool_use', 'code_generation', 'summarization', 'citation'],
-      maxContextTokens: 131072,
-      maxOutputTokens: 8192,
-      costPerInputMillionTokens: 1.0,
-      costPerOutputMillionTokens: 3.0,
-      privacyDestination: 'provider_cloud',
-      supportsToolUse: true,
-      supportsStreaming: true,
-    };
-
-    // If using a custom model or OpenRouter, ONLY advertise the custom model
-    if (isCustomModel || this.baseUrl.includes('openrouter')) {
-      return [customDescriptor];
+    if (isLocal) {
+      return [{
+        modelId: this.model,
+        displayName: `Local: ${this.model}`,
+        providerId: 'qwen',
+        capabilities: ['reasoning', 'tool_use', 'code_generation', 'summarization', 'citation'],
+        maxContextTokens: 32768,
+        maxOutputTokens: 8192,
+        costPerInputMillionTokens: 0,
+        costPerOutputMillionTokens: 0,
+        privacyDestination: 'local',
+        supportsToolUse: true,
+        supportsStreaming: true,
+      }];
     }
 
-    // Otherwise, advertise the default DashScope models
+    const isCustomModel = !['qwen-max', 'qwen-plus', 'qwen-turbo'].includes(this.model);
+    if (isCustomModel || this.baseUrl.includes('openrouter')) {
+      return [{
+        modelId: this.model,
+        displayName: this.model,
+        providerId: 'qwen',
+        capabilities: ['reasoning', 'tool_use', 'code_generation', 'summarization', 'citation'],
+        maxContextTokens: 131072,
+        maxOutputTokens: 8192,
+        costPerInputMillionTokens: 1.0,
+        costPerOutputMillionTokens: 3.0,
+        privacyDestination: 'provider_cloud',
+        supportsToolUse: true,
+        supportsStreaming: true,
+      }];
+    }
+
     return [
       {
         modelId: 'qwen-max',
@@ -87,28 +100,16 @@ export class QwenProvider implements ModelProvider {
         privacyDestination: 'provider_cloud',
         supportsToolUse: true,
         supportsStreaming: true,
-      },
-      {
-        modelId: 'qwen-plus',
-        displayName: 'Qwen Plus',
-        providerId: 'qwen',
-        capabilities: ['reasoning', 'tool_use', 'code_generation', 'summarization'],
-        maxContextTokens: 131072,
-        maxOutputTokens: 8192,
-        costPerInputMillionTokens: 0.8,
-        costPerOutputMillionTokens: 2.0,
-        privacyDestination: 'provider_cloud',
-        supportsToolUse: true,
-        supportsStreaming: true,
       }
     ];
   }
 
   async complete(request: ModelCompletionRequest): Promise<ModelCompletionResponse> {
-    if (!this.apiKey) {
+    const isLocal = this.baseUrl.includes('localhost') || this.baseUrl.includes('127.0.0.1');
+    if (!this.apiKey && !isLocal) {
       throw new JunubError(
         JunubErrorCode.CAPABILITY_UNAVAILABLE,
-        'Qwen API key is not configured. Set DASHSCOPE_API_KEY.'
+        'Qwen API key is not configured. Set DASHSCOPE_API_KEY or use a local provider.'
       );
     }
 
@@ -124,6 +125,11 @@ export class QwenProvider implements ModelProvider {
       stop: request.stopSequences,
     };
 
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (this.apiKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
+
     let lastError: Error | undefined;
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
@@ -133,10 +139,7 @@ export class QwenProvider implements ModelProvider {
 
         const response = await fetch(url, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.apiKey}`,
-          },
+          headers,
           body: JSON.stringify(body),
           signal: controller.signal,
         });
@@ -145,14 +148,14 @@ export class QwenProvider implements ModelProvider {
 
         if (!response.ok) {
           const errorText = await response.text().catch(() => 'Unknown error');
-          throw new JunubError(JunubErrorCode.CAPABILITY_UNAVAILABLE, `Qwen API error (${response.status}): ${errorText}`);
+          throw new JunubError(JunubErrorCode.CAPABILITY_UNAVAILABLE, `API error (${response.status}): ${errorText}`);
         }
 
         const data = await response.json() as any;
         const choice = data.choices?.[0];
 
         if (!choice?.message?.content && !choice?.message?.tool_calls) {
-          throw new JunubError(JunubErrorCode.CAPABILITY_UNAVAILABLE, 'Qwen returned an empty or malformed response.');
+          throw new JunubError(JunubErrorCode.CAPABILITY_UNAVAILABLE, 'Returned an empty or malformed response.');
         }
 
         const latencyMs = Date.now() - startTime;
@@ -160,16 +163,9 @@ export class QwenProvider implements ModelProvider {
         const inputTokens = usage.prompt_tokens || 0;
         const outputTokens = usage.completion_tokens || 0;
 
-        const costPerIn = request.modelId.includes('turbo') ? 0.4 : request.modelId.includes('plus') ? 0.8 : 2.0;
-        const costPerOut = request.modelId.includes('turbo') ? 1.2 : request.modelId.includes('plus') ? 2.0 : 6.0;
-        const estimatedCostUsd = ((inputTokens / 1000000) * costPerIn) + ((outputTokens / 1000000) * costPerOut);
-
-        const modelUsage: ModelUsage = {
-          inputTokens,
-          outputTokens,
-          estimatedCostUsd,
-          latencyMs,
-        };
+        const costPerIn = request.modelId.includes('turbo') ? 0.4 : 2.0;
+        const costPerOut = request.modelId.includes('turbo') ? 1.2 : 6.0;
+        const estimatedCostUsd = isLocal ? 0 : ((inputTokens / 1000000) * costPerIn) + ((outputTokens / 1000000) * costPerOut);
 
         return {
           content: choice.message.content || '',
@@ -179,45 +175,31 @@ export class QwenProvider implements ModelProvider {
             arguments: JSON.parse(tc.function.arguments || '{}'),
           })) || [],
           servedBy: data.model || request.modelId,
-          usage: modelUsage,
+          usage: { inputTokens, outputTokens, estimatedCostUsd, latencyMs },
           stopReason: this.mapStopReason(choice.finish_reason),
         };
 
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
-
-        const isTransient =
-          lastError.name === 'AbortError' ||
-          (lastError instanceof JunubError && lastError.message.includes('Qwen API error (5'));
-
-        if (!isTransient || attempt === this.maxRetries) {
-          throw lastError;
-        }
-
-        const delayMs = Math.pow(2, attempt - 1) * 1000;
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        const isTransient = lastError.name === 'AbortError' || (lastError instanceof JunubError && lastError.message.includes('API error (5'));
+        if (!isTransient || attempt === this.maxRetries) throw lastError;
+        await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt - 1) * 1000));
       }
     }
-
-    throw lastError || new Error('Unknown Qwen generation failure');
+    throw lastError || new Error('Unknown generation failure');
   }
 
   private mapMessages(messages: readonly ModelMessage[]): any[] {
     return messages.map(m => {
       const msg: any = { role: m.role, content: m.content };
-
       if (m.role === 'assistant' && m.toolCalls) {
         msg.tool_calls = m.toolCalls.map(tc => ({
-          id: tc.id,
-          type: 'function',
-          function: { name: tc.name, arguments: JSON.stringify(tc.arguments) }
+          id: tc.id, type: 'function', function: { name: tc.name, arguments: JSON.stringify(tc.arguments) }
         }));
       }
-
       if (m.role === 'tool' && m.toolResult) {
         msg.tool_call_id = m.toolResult.toolCallId;
       }
-
       return msg;
     });
   }
