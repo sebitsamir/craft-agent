@@ -1,6 +1,8 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 import { createInterface } from 'node:readline';
 import path from 'node:path';
+import { appendFile, mkdir } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 
 // Domain packs
 import { inspect } from './lib/inspect.mjs';
@@ -29,12 +31,26 @@ import {
 } from '../packages/models/dist/index.js';
 import { selectModelProvider } from './lib/providers.mjs';
 
-// ---------------------------------------------------------------------------
-// Infrastructure
-// ---------------------------------------------------------------------------
-
 const rl = createInterface({ input: process.stdin, terminal: false });
 const TASK_LOG_DIR = process.env.JUNUB_TASK_LOG_DIR || path.join('.junub', 'tasks');
+
+// FIX: Dynamically find the project root to guarantee the history file is in the right place
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '..');
+const HISTORY_FILE = path.join(ROOT_DIR, '.junub', 'history.jsonl');
+
+process.stderr.write('[engine] History file target: ' + HISTORY_FILE + '\n');
+
+async function logHistory(record) {
+  try {
+    await mkdir(path.dirname(HISTORY_FILE), { recursive: true });
+    await appendFile(HISTORY_FILE, JSON.stringify(record) + '\n');
+    process.stderr.write('[engine] History logged successfully.\n');
+  } catch (err) {
+    process.stderr.write('[engine] Failed to write history: ' + err.message + '\n');
+  }
+}
 
 class StreamingEventStore extends FileEventStore {
   constructor(filePath, emit) {
@@ -62,29 +78,48 @@ async function executeRealTask(taskId, contract, plan) {
     try {
       process.stdout.write(serializeProtocolMessage(evt) + '\n');
     } catch (e) {
-      process.stderr.write(`[engine] emit failed: ${e.message}\n`);
+      process.stderr.write('[engine] emit failed: ' + e.message + '\n');
     }
   };
 
-  const filePath = path.join(TASK_LOG_DIR, `${taskId}.jsonl`);
+  const filePath = path.join(TASK_LOG_DIR, taskId + '.jsonl');
   const eventStore = new StreamingEventStore(filePath, emit);
   const actionGuard = new InMemoryActionGuard();
 
   const plannedSteps = Array.isArray(plan)
     ? plan
     : contract.acceptance.map((c) => ({
-      stepId: c.id,
-      statement: c.statement,
-      action: { kind: 'noop', params: { statement: c.statement } },
-    }));
+        stepId: c.id,
+        statement: c.statement,
+        action: { kind: 'noop', params: { statement: c.statement } },
+      }));
 
   const steps = plannedSteps.map((s) => ({
-    stepId: s.stepId || s.id || `step-${Math.random().toString(36).slice(2)}`,
+    stepId: s.stepId || s.id || 'step-' + Math.random().toString(36).slice(2),
     statement: s.statement || s.stepId || s.id,
     action: makeStepAction(s.action),
   }));
 
-  await runTask({ taskId, steps, eventStore, actionGuard });
+  try {
+    await runTask({ taskId, steps, eventStore, actionGuard });
+    await logHistory({
+      timestamp: new Date().toISOString(),
+      taskId,
+      event: 'task_completed',
+      contract: { title: contract.title, intent: contract.intent, domain: contract.domain },
+      status: 'succeeded'
+    });
+  } catch (err) {
+    process.stderr.write('[engine] task execution error: ' + err.message + '\n');
+    await logHistory({
+      timestamp: new Date().toISOString(),
+      taskId,
+      event: 'task_failed',
+      contract: { title: contract.title, intent: contract.intent, domain: contract.domain },
+      status: 'failed',
+      error: err.message
+    });
+  }
 }
 
 rl.on('line', async (line) => {
@@ -103,7 +138,7 @@ rl.on('line', async (line) => {
         success: false,
         error: { code: 'PROTOCOL_MALFORMED', message: err.message },
         timestamp: new Date().toISOString(),
-      }) + '\n',
+      }) + '\n'
     );
     return;
   }
@@ -133,10 +168,19 @@ rl.on('line', async (line) => {
         throw new Error('Invalid task contract: missing acceptance criteria');
       }
       const { provider, source } = selectModelProvider();
-      process.stderr.write(`[engine] task.plan using provider: ${source}\n`);
+      process.stderr.write('[engine] task.plan using provider: ' + source + '\n');
       const router = new CapabilityRouter([provider]);
       await router.refreshModels();
       result = await generateReadOnlyPlan(contract, { router });
+      
+      await logHistory({
+        timestamp: new Date().toISOString(),
+        taskId: contract.taskId || 'unknown',
+        event: 'plan_generated',
+        contract: { title: contract.title, intent: contract.intent, domain: contract.domain },
+        planStepsCount: result.steps ? result.steps.length : 0,
+        modelUsed: result.modelUsed || source
+      });
     } else if (request.method === 'task.compile') {
       const plan = request.params?.plan;
       const context = request.params?.context;
@@ -149,7 +193,7 @@ rl.on('line', async (line) => {
       if (!contract || !Array.isArray(contract.acceptance)) {
         throw new Error('Invalid task contract: missing acceptance criteria');
       }
-      const taskId = contract.taskId || `task-${Date.now()}`;
+      const taskId = contract.taskId || 'task-' + Date.now();
 
       process.stdout.write(
         serializeProtocolMessage({
@@ -158,15 +202,13 @@ rl.on('line', async (line) => {
           success: true,
           result: { taskId, status: 'accepted' },
           timestamp: new Date().toISOString(),
-        }) + '\n',
+        }) + '\n'
       );
 
-      executeRealTask(taskId, contract, request.params?.plan).catch((e) =>
-        process.stderr.write(`[engine] task execution error: ${e.message}\n`),
-      );
+      executeRealTask(taskId, contract, request.params?.plan);
       return;
     } else {
-      throw new Error(`Unknown method: ${request.method}`);
+      throw new Error('Unknown method: ' + request.method);
     }
   } catch (err) {
     success = false;
@@ -180,7 +222,7 @@ rl.on('line', async (line) => {
       success,
       ...(success ? { result } : { error: errorPayload }),
       timestamp: new Date().toISOString(),
-    }) + '\n',
+    }) + '\n'
   );
 });
 

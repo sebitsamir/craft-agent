@@ -6,6 +6,7 @@ import { showFilmPanel, type FilmReportView } from './views/filmView.js';
 import { FilmTreeProvider } from './views/filmTree.js';
 import { TaskProgressProvider } from './views/taskProgressView.js';
 import { showPlanReviewPanel } from './views/planReviewView.js';
+import { showHistoryPanel } from './views/historyView.js'; // <-- ADDED: History View import
 
 let transport: EngineTransport | undefined;
 let outputChannel: vscode.OutputChannel;
@@ -383,7 +384,14 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   });
 
-  context.subscriptions.push(inspectCmd, verifyCmd, runTaskCmd, inspectFilmCmd, loadFilmCmd, applyFilmPatchCmd);
+  // ---------------------------------------------------------------------
+  // Command: View Task History (V2)
+  // ---------------------------------------------------------------------
+  const historyCmd = vscode.commands.registerCommand('junubAgent.viewHistory', () => {
+    showHistoryPanel(context);
+  });
+
+  context.subscriptions.push(inspectCmd, verifyCmd, runTaskCmd, inspectFilmCmd, loadFilmCmd, applyFilmPatchCmd, historyCmd);
   outputChannel.appendLine('[UI] Junub Agent extension activated.');
 }
 
