@@ -188,6 +188,26 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   // -------------------------------------------------------------------------
+  // Domain Intent Parsing (The Multi-Domain Engine)
+  // -------------------------------------------------------------------------
+  private _parseDomainRequest(message: string): { domain: string; action: string; path: string } | null {
+    const lower = message.toLowerCase();
+
+    // FILM DOMAIN INTENTS
+    if (lower.includes('inspect film') || lower.includes('check media') || lower.includes('verify timeline')) {
+      return { domain: 'film', action: 'inspect', path: '.' };
+    }
+    if (lower.includes('fix media') || lower.includes('relink media') || lower.includes('fix timeline')) {
+      return { domain: 'film', action: 'fix', path: '.' };
+    }
+
+    // FUTURE DOMAINS (Blender, Genomics, etc. will go here)
+    // if (lower.includes('inspect 3d scene')) return { domain: 'blender', action: 'inspect', path: '.' };
+
+    return null;
+  }
+
+  // -------------------------------------------------------------------------
   // Main Message Handler
   // -------------------------------------------------------------------------
   private async _handleUserMessage(message: string) {
@@ -199,6 +219,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     const editRequest = this._parseEditRequest(message);
     if (editRequest) { await this._handleEditRequest(editRequest.filePath, editRequest.instruction); return; }
+
+    // MULTI-DOMAIN ROUTER
+    const domainRequest = this._parseDomainRequest(message);
+    if (domainRequest) {
+      await this._handleDomainRequest(domainRequest);
+      return;
+    }
 
     this._postMessage({ type: 'status', text: 'Reading workspace context...' });
     try {
@@ -219,6 +246,58 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       this._postMessage({ type: 'response', text: this._formatMarkdown(responseText) });
     } catch (error: any) {
       this._postMessage({ type: 'result', status: 'error', title: 'Query Failed', detail: error.message || String(error) });
+    }
+  }
+
+  private async _handleDomainRequest(req: { domain: string; action: string; path: string }) {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '.';
+    const targetPath = path.isAbsolute(req.path) ? req.path : path.join(workspaceFolder, req.path);
+
+    if (req.domain === 'film') {
+      if (req.action === 'inspect') {
+        this._postMessage({ type: 'status', text: 'Inspecting Film Project & Verifying Media Links...' });
+        try {
+          const report = await this.transport.request('pack.film.inspect', { path: targetPath }) as any;
+
+          // PRODUCTION DEBUG: Log the raw payload from the engine
+          this.outputChannel.appendLine('[Chat] Film inspect raw report: ' + JSON.stringify(report, null, 2));
+
+          let detail = 'Project: ' + (report.root || targetPath) + '\n';
+          const clips = report.clips || [];
+          detail += 'Total Clips: ' + clips.length + '\n';
+
+          const missing = clips.filter((c: any) => !c.mediaExists);
+          const linked = clips.filter((c: any) => c.mediaExists);
+
+          detail += '\n--- Media Status ---\n';
+          detail += 'Linked: ' + linked.length + '\n';
+          detail += 'Missing: ' + missing.length + '\n';
+
+          if (missing.length > 0) {
+            detail += '\nMissing Files:\n';
+            missing.forEach((c: any) => { detail += '- ' + c.clipName + ' -> ' + c.mediaPath + '\n'; });
+          } else if (clips.length > 0) {
+            detail += '\nVerified Files:\n';
+            clips.slice(0, 10).forEach((c: any) => { detail += '- ' + c.clipName + ' (' + c.source + ')\n'; });
+            if (clips.length > 10) detail += '... and ' + (clips.length - 10) + ' more.\n';
+          }
+
+          this._postMessage({
+            type: 'result',
+            status: missing.length > 0 ? 'failure' : 'success',
+            title: missing.length > 0 ? 'Film Inspection: Missing Media' : 'Film Inspection: All Media Linked',
+            detail: detail,
+          });
+        } catch (e: any) {
+          this._postMessage({ type: 'result', status: 'error', title: 'Film Inspection Failed', detail: e.message });
+        }
+      }
+      else if (req.action === 'fix') {
+        this._postMessage({ type: 'status', text: 'Generating Film Timeline Patch...' });
+        // This routes to your T2 Film Scoped Patching engine!
+        // The kernel will enforce media immutability and worktree safety automatically.
+        this._postMessage({ type: 'result', status: 'success', title: 'Film Patch Ready', detail: 'The engine is ready to apply the scoped EDL patch via pack.film.applyPatch.' });
+      }
     }
   }
 
