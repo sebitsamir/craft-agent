@@ -34,7 +34,6 @@ import { selectModelProvider } from './lib/providers.mjs';
 const rl = createInterface({ input: process.stdin, terminal: false });
 const TASK_LOG_DIR = process.env.JUNUB_TASK_LOG_DIR || path.join('.junub', 'tasks');
 
-// FIX: Dynamically find the project root to guarantee the history file is in the right place
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
@@ -108,7 +107,7 @@ async function executeRealTask(taskId, contract, plan) {
       event: 'task_completed',
       contract: { title: contract.title, intent: contract.intent, domain: contract.domain },
       status: 'succeeded',
-      executedSteps: steps.map(function (s) { return { stepId: s.stepId, statement: s.statement, kind: s.action.kind }; })
+      executedSteps: steps.map((s) => ({ stepId: s.stepId, statement: s.statement, kind: s.action.kind })),
     });
   } catch (err) {
     process.stderr.write('[engine] task execution error: ' + err.message + '\n');
@@ -118,7 +117,7 @@ async function executeRealTask(taskId, contract, plan) {
       event: 'task_failed',
       contract: { title: contract.title, intent: contract.intent, domain: contract.domain },
       status: 'failed',
-      error: err.message
+      error: err.message,
     });
   }
 }
@@ -167,123 +166,168 @@ rl.on('line', async (line) => {
       const { command, args, cwd } = request.params || {};
       if (!command) throw new Error('Missing command');
 
-      // Import the run function dynamically
       const { run } = await import('./lib/process.mjs');
-
       const workDir = cwd || process.cwd();
       process.stderr.write('[engine] Running command: ' + command + ' ' + (args || []).join(' ') + ' in ' + workDir + '\n');
 
-      const result = await run(command, args || [], workDir, {
-        timeoutMs: 60000,
+      result = await run(command, args || [], workDir, {
+        timeoutMs: 120000,
         maxOutputBytes: 131072,
-        shell: true, //Required for Windows to run pnpm/npm .cmd scripts
+        shell: true,
       });
 
       process.stderr.write('[engine] Command exited with code: ' + result.exitCode + '\n');
-
       result.success = result.exitCode === 0 && !result.error && !result.timedOut;
-      return result;
 
-    }
-
-    else if (request.method === 'chat.edit') {
-      const { filePath, instruction, fileContent } = request.params || {};
-      if (!filePath || !instruction) throw new Error('Missing filePath or instruction');
-
-      const { provider, source, model } = selectModelProvider();
+    } else if (request.method === 'chat.diagnose') {
+      const { command, stdout, stderr } = request.params || {};
+      const { provider, model } = selectModelProvider();
       const router = new CapabilityRouter([provider]);
       await router.refreshModels();
 
-      const systemContent = 'You are a code editor. Write the requested code change. ' +
-        'Output ONLY the code itself. No explanations. No markdown. No code fences. ' +
-        'If writing a function, start with the function keyword and end with the closing brace. ' +
-        'If adding an import, write only the import statement. ' +
-        'Do not repeat unchanged code from the file. Only write what needs to be added or changed.';
+      // Strip ANSI color codes for better LLM comprehension
+      const rawOutput = ((stderr || '') + '\n' + (stdout || '')).replace(/\x1b\[[0-9;]*m/g, '');
+      const errorText = rawOutput.slice(-4000);
 
-      const userContent = 'FILE: ' + filePath +
-        '\n\nCURRENT CONTENT (for reference only, do not repeat it):\n' + (fileContent || '(empty)') +
+      const system = 'You are an expert debugger. A terminal command failed. Look at the error message and the code snippet provided. ' +
+        'Identify the EXACT syntax error (like a missing bracket, typo, or wrong import). ' +
+        'Output ONLY a valid JSON object like: {"filePath": "src/foo.js", "instruction": "Add the missing opening curly brace { on line 7 after the function declaration"}. ' +
+        'Do NOT suggest deleting the code. Fix the root cause. ' +
+        'If you cannot identify a specific file to fix, return {"filePath": null, "instruction": "Reason why you cannot fix it"}.';
+
+      const user = 'Command: ' + command + '\n\nError Output:\n' + errorText;
+
+      const response = await provider.complete({
+        modelId: model || 'qwen2.5:3b',
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        temperature: 0.1,
+        maxOutputTokens: 256,
+      });
+
+      let cleaned = response.content.trim();
+      if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      else if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+
+      // RESILIENT JSON PARSING: Extract just the {...} object, ignoring trailing garbage like ";}"
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+      }
+
+      try {
+        result = JSON.parse(cleaned);
+      } catch (e) {
+        result = { filePath: null, instruction: 'Failed to parse diagnosis: ' + cleaned };
+      }
+
+    } else if (request.method === 'chat.edit') {
+      const { filePath, instruction, fileContent } = request.params || {};
+      if (!filePath || !instruction) throw new Error('Missing filePath or instruction');
+
+      const { provider, model } = selectModelProvider();
+      const router = new CapabilityRouter([provider]);
+      await router.refreshModels();
+
+      const systemContent = `You are an expert code editor. Your job is to fix errors in code.
+You MUST output the changes using the SEARCH/REPLACE block format.
+Do NOT output the entire file. Only output the exact lines that need to change.
+
+Format:
+<<<<<<< SEARCH
+[exact original code to find, character-for-character]
+=======
+[new code to replace it with]
+>>>>>>> REPLACE
+
+Rules:
+1. The SEARCH block must EXACTLY match a contiguous block of code in the original file. Include enough context (surrounding lines) to make it unique.
+2. Output ONLY the SEARCH/REPLACE block(s). No explanations, no markdown code fences.
+3. If you need to add a missing bracket, include the line above it in the SEARCH block.`;
+
+      const userContent = 'FILE PATH: ' + filePath +
         '\n\nINSTRUCTION: ' + instruction +
-        '\n\nWrite ONLY the new or changed code:';
+        '\n\nCURRENT FILE CONTENT:\n' + (fileContent || '(empty file)') +
+        '\n\nOUTPUT THE SEARCH/REPLACE BLOCK NOW:';
 
       const response = await provider.complete({
         modelId: model || 'qwen2.5:3b',
         messages: [
           { role: 'system', content: systemContent },
-          { role: 'user', content: userContent }
+          { role: 'user', content: userContent },
         ],
         temperature: 0.1,
         maxOutputTokens: 2048,
       });
 
-      let newCode = response.content.trim();
-      if (newCode.startsWith('```')) {
-        newCode = newCode.replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '');
+      let rawOutput = response.content.trim();
+      if (rawOutput.startsWith('```')) {
+        rawOutput = rawOutput.replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '');
       }
 
-      // SAFE EDIT: Only replace a stub if we can find it precisely by function name
       let editedContent = fileContent || '';
-      let editApplied = false;
+      let appliedCount = 0;
 
-      // Extract function name from the new code
-      const funcNameMatch = newCode.match(/(?:export\s+)?(?:async\s+)?function\s+(\w+)/);
-      if (funcNameMatch) {
-        const funcName = funcNameMatch[1];
-        // Find the EXACT stub: function declaration + body containing only comments
-        const stubRegex = new RegExp(
-          '((?:\\/\\*\\*[\\s\\S]*?\\*\\/\\s*)?(?:export\\s+)?(?:async\\s+)?function\\s+' + funcName + '\\s*\\([^)]*\\)\\s*\\{[^}]*\\/\\/[^}]*\\})',
-          's'
-        );
-        const stubMatch = editedContent.match(stubRegex);
-        if (stubMatch) {
-          const stubStart = editedContent.indexOf(stubMatch[0]);
-          const stubEnd = stubStart + stubMatch[0].length;
-          editedContent = editedContent.substring(0, stubStart) + newCode + editedContent.substring(stubEnd);
-          editApplied = true;
+      // Helper function to apply a search/replace pair with fuzzy matching
+      const applyPatch = (searchBlock, replaceBlock) => {
+        // 1. Try exact match first
+        if (editedContent.includes(searchBlock)) {
+          editedContent = editedContent.replace(searchBlock, replaceBlock);
+          appliedCount++;
+          return true;
         }
-      }
+        // 2. Fuzzy match fallback (crucial for 3B models that mess up indentation)
+        const searchLines = searchBlock.split('\n').map((l) => l.trim()).filter((l) => l);
+        if (searchLines.length === 0) return false;
 
-      // If no stub was found/replaced, append safely
-      if (!editApplied) {
-        editedContent = editedContent.trimEnd() + '\n\n' + newCode + '\n';
-      }
-
-      // DEDUPLICATE: Remove duplicate function declarations if the model appended
-      // a function that already exists
-      const funcNames = new Set();
-      const lines = editedContent.split('\n');
-      const deduped = [];
-      let skipUntilClose = false;
-      let braceDepth = 0;
-      for (let i = 0; i < lines.length; i++) {
-        const funcMatch = lines[i].match(/(?:export\s+)?(?:async\s+)?function\s+(\w+)/);
-        if (funcMatch && funcNames.has(funcMatch[1])) {
-          // Skip this duplicate function entirely
-          skipUntilClose = true;
-          braceDepth = 0;
-          continue;
-        }
-        if (funcMatch) funcNames.add(funcMatch[1]);
-        if (skipUntilClose) {
-          for (const ch of lines[i]) {
-            if (ch === '{') braceDepth++;
-            if (ch === '}') braceDepth--;
+        const fileLines = editedContent.split('\n');
+        for (let i = 0; i <= fileLines.length - searchLines.length; i++) {
+          let matchAll = true;
+          for (let j = 0; j < searchLines.length; j++) {
+            if (fileLines[i + j].trim() !== searchLines[j]) {
+              matchAll = false;
+              break;
+            }
           }
-          if (braceDepth <= 0 && lines[i].includes('}')) skipUntilClose = false;
-          continue;
+          if (matchAll) {
+            const replaceLines = replaceBlock.split('\n');
+            fileLines.splice(i, searchLines.length, ...replaceLines);
+            editedContent = fileLines.join('\n');
+            appliedCount++;
+            return true;
+          }
         }
-        deduped.push(lines[i]);
+        return false;
+      };
+
+      // FORMAT 1: Strict Aider/Cursor format
+      const strictRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n?=======\n([\s\S]*?)\n?>>>>>>> REPLACE/g;
+      let match;
+      while ((match = strictRegex.exec(rawOutput)) !== null) {
+        applyPatch(match[1], match[2]);
       }
-      editedContent = deduped.join('\n');
+
+      // FORMAT 2: Simple SEARCH/REPLACE (common for small 3B models)
+      if (appliedCount === 0) {
+        process.stderr.write('[engine] Strict format not found. Trying simple SEARCH/REPLACE format...\n');
+        const simpleRegex = /SEARCH:\s*\n([\s\S]*?)\nREPLACE:\s*\n([\s\S]*?)(?=\nSEARCH:|$)/gi;
+        while ((match = simpleRegex.exec(rawOutput)) !== null) {
+          applyPatch(match[1], match[2]);
+        }
+      }
+
+      if (appliedCount === 0) {
+        throw new Error('Failed to apply changes. The model did not output a recognizable SEARCH/REPLACE block. Raw output:\n' + rawOutput.slice(0, 500));
+      }
 
       result = {
         filePath: filePath,
         originalContent: fileContent || '',
         editedContent: editedContent,
         instruction: instruction,
-        modelUsed: model || 'unknown'
+        modelUsed: model || 'unknown',
       };
-    }
-    else if (request.method === 'chat.query') {
+    } else if (request.method === 'chat.query') {
       const { message, history, workspaceContext } = request.params || {};
       if (!message) throw new Error('Missing message');
 
@@ -291,35 +335,39 @@ rl.on('line', async (line) => {
       const router = new CapabilityRouter([provider]);
       await router.refreshModels();
 
-      const historyText = history && history.length > 0
-        ? history.map(function (h) { return h.role + ': ' + h.content; }).join('\n')
-        : '';
+      const historyText =
+        history && history.length > 0
+          ? history.map((h) => h.role + ': ' + h.content).join('\n')
+          : '';
 
-      const systemContent = 'You are Junub Agent, an expert software engineer working inside a VS Code workspace. ' +
+      const systemContent =
+        'You are Junub Agent, an expert software engineer working inside a VS Code workspace. ' +
         'You have access to the workspace structure and files provided below. ' +
         'Answer the user question accurately using ONLY the real files and context provided. ' +
         'Never hallucinate file paths or invent files that do not exist. ' +
         'If you reference a file, use its exact path from the workspace context. ' +
         'Be specific, technical, and concise. Use markdown formatting for readability.';
 
-      const userContent = 'WORKSPACE CONTEXT:\n' + (workspaceContext || 'No workspace open.') +
-        '\n\nCONVERSATION HISTORY:\n' + (historyText || 'No previous messages.') +
-        '\n\nUSER QUESTION:\n' + message;
+      const userContent =
+        'WORKSPACE CONTEXT:\n' +
+        (workspaceContext || 'No workspace open.') +
+        '\n\nCONVERSATION HISTORY:\n' +
+        (historyText || 'No previous messages.') +
+        '\n\nUSER QUESTION:\n' +
+        message;
 
       const response = await provider.complete({
         modelId: model || 'qwen2.5:3b',
         messages: [
           { role: 'system', content: systemContent },
-          { role: 'user', content: userContent }
+          { role: 'user', content: userContent },
         ],
         temperature: 0.2,
         maxOutputTokens: 2048,
       });
 
       result = { response: response.content, modelUsed: model || 'unknown' };
-
-    }
-    else if (request.method === 'task.refine') {
+    } else if (request.method === 'task.refine') {
       const { message, history, workspaceContext } = request.params || {};
       if (!message) throw new Error('Missing message for refinement');
 
@@ -327,18 +375,19 @@ rl.on('line', async (line) => {
       const router = new CapabilityRouter([provider]);
       await router.refreshModels();
 
-      const historyText = history && history.length > 0
-        ? `Previous context:\n${history.map(h => `${h.role}: ${h.content}`).join('\n')}`
-        : 'No previous context.';
+      const historyText =
+        history && history.length > 0
+          ? `Previous context:\n${history.map((h) => `${h.role}: ${h.content}`).join('\n')}`
+          : 'No previous context.';
 
-      // Inject the real workspace context into the prompt
       const contextBlock = workspaceContext
         ? `\n\nCURRENT WORKSPACE CONTEXT (Use these exact paths, folders, and technologies. DO NOT hallucinate fake files):\n${workspaceContext}`
         : '';
 
       const refinePrompt = [
         {
-          role: 'system', content: `You are an AI agent coordinator. Convert the user's request into a JSON object.
+          role: 'system',
+          content: `You are an AI agent coordinator. Convert the user's request into a JSON object.
 You MUST output ONLY valid JSON. No markdown, no explanations.
 ${contextBlock}
 
@@ -360,8 +409,9 @@ If the request is clear and actionable, output this EXACT structure:
 If the request is too vague even with context, output this EXACT structure:
 {
   "question": "What specific part should I focus on?"
-}` },
-        { role: 'user', content: `${historyText}\n\nUser request: ${message}` }
+}`,
+        },
+        { role: 'user', content: `${historyText}\n\nUser request: ${message}` },
       ];
 
       const response = await provider.complete({
@@ -384,8 +434,7 @@ If the request is too vague even with context, output this EXACT structure:
       } catch (err) {
         throw new Error(`Failed to parse refinement JSON: ${err.message}. Raw: ${cleaned.slice(0, 200)}`);
       }
-    }
-    else if (request.method === 'task.plan') {
+    } else if (request.method === 'task.plan') {
       const contract = request.params?.contract;
       if (!contract || !Array.isArray(contract.acceptance)) {
         throw new Error('Invalid task contract: missing acceptance criteria');
@@ -404,10 +453,11 @@ If the request is too vague even with context, output this EXACT structure:
         planStepsCount: result.steps ? result.steps.length : 0,
         modelUsed: result.modelUsed || source,
         plan: result.steps || null,
-        refusal: result.reason ? { reason: result.reason, message: result.message, suggestedNextAction: result.suggestedNextAction } : null
+        refusal: result.reason
+          ? { reason: result.reason, message: result.message, suggestedNextAction: result.suggestedNextAction }
+          : null,
       });
-    }
-    else if (request.method === 'task.compile') {
+    } else if (request.method === 'task.compile') {
       const plan = request.params?.plan;
       const context = request.params?.context;
       if (!plan || !context) {

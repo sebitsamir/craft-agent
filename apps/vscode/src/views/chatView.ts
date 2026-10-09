@@ -29,6 +29,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private history: ChatMessage[] = [];
   private pendingEdit: PendingEdit | null = null;
   private pendingCommand: PendingCommand | null = null;
+  private pendingEditIsAutoFix: boolean = false; // Guardrail Property
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -52,6 +53,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         await this._applyPendingEdit();
       } else if (data.type === 'rejectEdit') {
         this.pendingEdit = null;
+        this.pendingEditIsAutoFix = false;
         this._postMessage({ type: 'result', status: 'rejected', title: 'Edit Rejected', detail: 'No files were modified.' });
       } else if (data.type === 'viewDiff') {
         await this._showDiffPreview();
@@ -60,12 +62,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       } else if (data.type === 'rejectCommand') {
         this.pendingCommand = null;
         this._postMessage({ type: 'result', status: 'rejected', title: 'Command Cancelled', detail: 'No command was executed.' });
+      } else if (data.type === 'autoFix') {
+        await this._handleAutoFix(data.command, data.stdout, data.stderr);
       }
     });
   }
 
   // -------------------------------------------------------------------------
-  // Workspace Context
+  // Workspace Context (RAG)
   // -------------------------------------------------------------------------
   private async _readWorkspaceContext(): Promise<string> {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -130,7 +134,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   // -------------------------------------------------------------------------
-  // Command Detection
+  // Intent Parsing
   // -------------------------------------------------------------------------
   private _parseCommandRequest(message: string): { command: string; args: string[]; description: string } | null {
     const lower = message.toLowerCase();
@@ -141,7 +145,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         'test': { command: 'npm', args: ['test'], description: 'Run all tests' },
         'all tests': { command: 'npm', args: ['test'], description: 'Run all tests' },
         'the tests': { command: 'npm', args: ['test'], description: 'Run all tests' },
-        'the test': { command: 'npm', args: ['test'], description: 'Run all tests' }, // <-- FIXED
+        'the test': { command: 'npm', args: ['test'], description: 'Run all tests' },
         'build': { command: 'npm', args: ['run', 'build'], description: 'Build the project' },
         'lint': { command: 'npm', args: ['run', 'lint'], description: 'Run linter' },
         'dev': { command: 'npm', args: ['run', 'dev'], description: 'Start dev server' },
@@ -164,18 +168,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
       const parts = cmdStr.split(/\s+/).filter(p => p.length > 0);
       if (parts.length === 0) return null;
-      return {
-        command: parts[0]!,
-        args: parts.slice(1),
-        description: 'Run: ' + cmdStr,
-      };
+      return { command: parts[0]!, args: parts.slice(1), description: 'Run: ' + cmdStr };
     }
     return null;
   }
 
-  // -------------------------------------------------------------------------
-  // Edit Detection
-  // -------------------------------------------------------------------------
   private _parseEditRequest(message: string): { filePath: string; instruction: string } | null {
     const editPatterns = [
       /(?:edit|modify|update|change|refactor|add to|create)\s+([^\s]+\.\w+)\s+(?:to|:|with|by)\s+(.+)/i,
@@ -198,27 +195,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this.history.push({ role: 'user', content: message });
 
     const cmdRequest = this._parseCommandRequest(message);
-    if (cmdRequest) {
-      await this._handleCommandRequest(cmdRequest);
-      return;
-    }
+    if (cmdRequest) { await this._handleCommandRequest(cmdRequest); return; }
 
     const editRequest = this._parseEditRequest(message);
-    if (editRequest) {
-      await this._handleEditRequest(editRequest.filePath, editRequest.instruction);
-      return;
-    }
+    if (editRequest) { await this._handleEditRequest(editRequest.filePath, editRequest.instruction); return; }
 
-    // Normal question — show single updating status
     this._postMessage({ type: 'status', text: 'Reading workspace context...' });
     try {
       const workspaceContext = await this._readWorkspaceContext();
-
       this._postMessage({ type: 'status', text: 'Analyzing your question...' });
+
       const result = await this.transport.request('chat.query', {
-        message,
-        history: this.history.slice(-6),
-        workspaceContext,
+        message, history: this.history.slice(-6), workspaceContext,
       }) as any;
 
       if (result.error) {
@@ -239,12 +227,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   // -------------------------------------------------------------------------
   private async _handleCommandRequest(cmd: { command: string; args: string[]; description: string }) {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '.';
-    this.pendingCommand = {
-      command: cmd.command,
-      args: cmd.args,
-      cwd: workspaceFolder,
-      description: cmd.description,
-    };
+    this.pendingCommand = { command: cmd.command, args: cmd.args, cwd: workspaceFolder, description: cmd.description };
     this._postMessage({
       type: 'command',
       command: cmd.command + ' ' + cmd.args.join(' '),
@@ -264,9 +247,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     try {
       const result = await this.transport.request('chat.run', {
-        command: cmd.command,
-        args: cmd.args,
-        cwd: cmd.cwd,
+        command: cmd.command, args: cmd.args, cwd: cmd.cwd,
       }) as any;
 
       if (result.error && !result.stdout && !result.stderr) {
@@ -277,19 +258,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       const success = result.success || result.exitCode === 0;
       const durationSec = (result.durationMs / 1000).toFixed(1);
 
-      let detail = '';
-      detail += 'Command: ' + cmd.command + ' ' + cmd.args.join(' ') + '\n';
+      let detail = 'Command: ' + cmd.command + ' ' + cmd.args.join(' ') + '\n';
       detail += 'Exit code: ' + result.exitCode + '\n';
       detail += 'Duration: ' + durationSec + 's\n';
       if (result.timedOut) detail += 'WARNING: Command timed out.\n';
       if (result.truncated) detail += 'NOTE: Output was truncated.\n';
-
-      if (result.stdout && result.stdout.trim()) {
-        detail += '\n--- stdout ---\n' + result.stdout.trim();
-      }
-      if (result.stderr && result.stderr.trim()) {
-        detail += '\n--- stderr ---\n' + result.stderr.trim();
-      }
+      if (result.stdout && result.stdout.trim()) detail += '\n--- stdout ---\n' + result.stdout.trim();
+      if (result.stderr && result.stderr.trim()) detail += '\n--- stderr ---\n' + result.stderr.trim();
 
       this.history.push({
         role: 'assistant',
@@ -305,8 +280,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         stderr: result.stderr || '',
         exitCode: result.exitCode,
         durationMs: result.durationMs,
+        command: cmd.command + ' ' + cmd.args.join(' ')
       });
       this.pendingCommand = null;
+
+      // AUTONOMOUS AUTO-FIX: If the command failed, automatically trigger the fix loop
+      if (!success && result.stderr) {
+        this._postMessage({ type: 'status', text: 'Build failed. Automatically diagnosing and fixing...' });
+        // FIX: Use await with Promise to avoid setTimeout type issues (red underline) in VS Code extensions
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        this._handleAutoFix(cmd.command + ' ' + cmd.args.join(' '), result.stdout || '', result.stderr || '');
+      }
 
     } catch (error: any) {
       this._postMessage({ type: 'result', status: 'error', title: 'Execution Error', detail: error.message || String(error) });
@@ -314,9 +298,31 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   // -------------------------------------------------------------------------
+  // Auto-Fix Flow (The Agentic Loop)
+  // -------------------------------------------------------------------------
+  private async _handleAutoFix(command: string, stdout: string, stderr: string) {
+    this._postMessage({ type: 'status', text: 'Analyzing error to find the broken file...' });
+    try {
+      const diag = await this.transport.request('chat.diagnose', { command, stdout, stderr }) as any;
+
+      if (!diag.filePath) {
+        this._postMessage({ type: 'result', status: 'error', title: 'Cannot Auto-Fix', detail: diag.instruction || 'Could not identify a specific file to fix.' });
+        return;
+      }
+
+      this._postMessage({ type: 'status', text: 'Found issue in ' + diag.filePath + '. Generating fix...' });
+      // Pass `true` to mark this as an Auto-Fix so the Guardrail activates
+      await this._handleEditRequest(diag.filePath, diag.instruction, true);
+
+    } catch (e: any) {
+      this._postMessage({ type: 'result', status: 'error', title: 'Auto-Fix Failed', detail: e.message || String(e) });
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // File Edit Flow
   // -------------------------------------------------------------------------
-  private async _handleEditRequest(filePath: string, instruction: string) {
+  private async _handleEditRequest(filePath: string, instruction: string, isAutoFix: boolean = false) {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceFolder) {
       this._postMessage({ type: 'result', status: 'error', title: 'No Workspace', detail: 'No workspace is currently open.' });
@@ -346,13 +352,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         editedContent: result.editedContent,
         instruction: result.instruction,
       };
+
+      // Store the Auto-Fix flag for the Guardrail
+      this.pendingEditIsAutoFix = isAutoFix;
+
       const lineDiff = this._countChangedLines(result.originalContent, result.editedContent);
-      this._postMessage({
-        type: 'edit',
-        filePath: filePath,
-        instruction: instruction,
-        changes: lineDiff,
-      });
+      this._postMessage({ type: 'edit', filePath: filePath, instruction: instruction, changes: lineDiff });
     } catch (error: any) {
       this._postMessage({ type: 'result', status: 'error', title: 'Edit Failed', detail: error.message || String(error) });
     }
@@ -383,10 +388,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private async _applyPendingEdit() {
     if (!this.pendingEdit) return;
+    const isAutoFix = this.pendingEditIsAutoFix;
+
     try {
       const backupPath = this.pendingEdit.filePath + '.bak';
       await fs.writeFile(backupPath, this.pendingEdit.originalContent, 'utf8');
       await fs.writeFile(this.pendingEdit.filePath, this.pendingEdit.editedContent, 'utf8');
+
       const relativePath = vscode.workspace.workspaceFolders?.[0]
         ? path.relative(vscode.workspace.workspaceFolders[0].uri.fsPath, this.pendingEdit.filePath)
         : this.pendingEdit.filePath;
@@ -398,23 +406,57 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         title: 'File Saved Successfully',
         detail: 'File: ' + relativePath + '\nInstruction: ' + this.pendingEdit.instruction + '\nBackup: ' + path.basename(backupPath),
       });
+
       const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(this.pendingEdit.filePath));
       await vscode.window.showTextDocument(doc);
+
+      // --- AUTO-REVERT GUARDRAIL ---
+      if (isAutoFix) {
+        this._postMessage({ type: 'status', text: 'Verifying AI fix by re-running build...' });
+
+        // Automatically run the build again to verify the fix worked
+        const verifyResult = await this.transport.request('chat.run', {
+          command: 'npm',
+          args: ['run', 'build'],
+          cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '.',
+        }) as any;
+
+        if (verifyResult.exitCode !== 0) {
+          // THE FIX FAILED! Revert to the backup immediately.
+          this._postMessage({ type: 'status', text: 'AI fix failed verification. Reverting to backup...' });
+          await fs.writeFile(this.pendingEdit.filePath, this.pendingEdit.originalContent, 'utf8');
+
+          this._postMessage({
+            type: 'result',
+            status: 'error',
+            title: 'AI Fix Reverted',
+            detail: 'The AI attempted a fix, but the build still failed (exit code ' + verifyResult.exitCode + '). Your file has been safely restored from the .bak backup to prevent code corruption.'
+          });
+        } else {
+          // THE FIX WORKED!
+          this._postMessage({
+            type: 'result',
+            status: 'success',
+            title: 'AI Fix Verified!',
+            detail: 'The AI successfully fixed the error and the build now passes.'
+          });
+        }
+      }
+
       this.pendingEdit = null;
+      this.pendingEditIsAutoFix = false;
+
     } catch (error: any) {
       this._postMessage({ type: 'result', status: 'error', title: 'Save Failed', detail: error.message || String(error) });
     }
   }
 
   // -------------------------------------------------------------------------
-  // Markdown formatting
+  // Formatting Helpers
   // -------------------------------------------------------------------------
   private _formatMarkdown(text: string): string {
-    let html = text
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function (_m, _l, code) {
-      return '<pre class="code-block">' + code.trim() + '</pre>';
-    });
+    let html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, _l, code) => '<pre class="code-block">' + code.trim() + '</pre>');
     html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
@@ -428,16 +470,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     return '<p>' + html + '</p>';
   }
 
-  private _escapeHtml(text: string): string {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
   private _postMessage(message: any) {
     if (this._view) this._view.webview.postMessage(message);
   }
 
   // -------------------------------------------------------------------------
-  // HTML — Professional persistent feedback UI
+  // Webview HTML & UI Logic
   // -------------------------------------------------------------------------
   private _getHtmlForWebview() {
     return `<!DOCTYPE html>
@@ -451,15 +489,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: var(--vscode-font-family); padding: 10px; display: flex; flex-direction: column; height: 100vh; color: var(--vscode-foreground); font-size: 13px; }
     #chat-container { flex: 1; overflow-y: auto; padding: 8px; border: 1px solid var(--vscode-panel-border); border-radius: 6px; margin-bottom: 8px; background: var(--vscode-editor-background); }
-
     .msg { margin-bottom: 10px; padding: 10px 12px; border-radius: 6px; line-height: 1.5; }
     .msg-user { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); text-align: right; border-radius: 6px 6px 2px 6px; }
     .msg-assistant { background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); border-radius: 6px 6px 6px 2px; }
-
     .status-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; margin-bottom: 10px; color: var(--vscode-descriptionForeground); font-style: italic; border-radius: 4px; background: var(--vscode-editorWidget-background); border: 1px dashed var(--vscode-panel-border); }
     .status-bar .codicon { animation: spin 1s linear infinite; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-
     .result-card { margin-bottom: 10px; padding: 12px; border-radius: 6px; border-left: 4px solid; }
     .result-success { border-left-color: var(--vscode-testing-iconPassed); background: var(--vscode-editorWidget-background); }
     .result-failure { border-left-color: var(--vscode-testing-iconFailed); background: var(--vscode-editorWidget-background); }
@@ -467,12 +502,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     .result-rejected { border-left-color: var(--vscode-descriptionForeground); background: var(--vscode-editorWidget-background); }
     .result-title { font-weight: bold; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
     .result-detail { white-space: pre-wrap; font-family: var(--vscode-editor-font-family); font-size: 12px; background: var(--vscode-textBlockQuote-background); padding: 8px; border-radius: 4px; margin-top: 6px; max-height: 300px; overflow-y: auto; }
-
     .action-card { margin-bottom: 10px; padding: 12px; border-radius: 6px; background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-textLink-foreground); }
     .action-card h4 { margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
     .action-card p { margin: 4px 0; }
     .action-card code { background: var(--vscode-textBlockQuote-background); padding: 1px 5px; border-radius: 3px; font-family: var(--vscode-editor-font-family); font-size: 12px; }
-
     .action-bar { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
     .action-bar button { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px; font-weight: bold; }
     .btn-primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
@@ -480,10 +513,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     .btn-success { background: var(--vscode-testing-iconPassed); color: white; }
     .btn-danger { background: var(--vscode-testing-iconFailed); color: white; }
     .btn-secondary { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
-
     .code-block { background: var(--vscode-textBlockQuote-background); padding: 10px; border-radius: 4px; font-family: var(--vscode-editor-font-family); font-size: 12px; white-space: pre-wrap; word-wrap: break-word; border-left: 3px solid var(--vscode-textLink-foreground); margin: 6px 0; overflow-x: auto; max-height: 300px; overflow-y: auto; }
     .inline-code { background: var(--vscode-textBlockQuote-background); padding: 1px 5px; border-radius: 3px; font-family: var(--vscode-editor-font-family); font-size: 12px; }
-
     #input-area { display: flex; gap: 8px; }
     #message-input { flex: 1; padding: 8px 10px; border: 1px solid var(--vscode-input-border); background: var(--vscode-input-background); color: var(--vscode-input-foreground); border-radius: 4px; font-family: var(--vscode-font-family); font-size: 13px; }
     #send-btn { padding: 8px 16px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: bold; }
@@ -503,6 +534,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const messageInput = document.getElementById('message-input');
     const sendBtn = document.getElementById('send-btn');
     let statusBar = null;
+    let lastFailedOutput = null;
 
     function addUserMessage(text) {
       const div = document.createElement('div');
@@ -534,7 +566,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       if (statusBar) { statusBar.remove(); statusBar = null; }
     }
 
-    function addResultCard(status, title, detail, stdout, stderr, exitCode, durationMs) {
+    function addResultCard(status, title, detail, stdout, stderr, exitCode, durationMs, command) {
       removeStatus();
       const iconMap = { success: 'pass', failure: 'error', error: 'error', rejected: 'close' };
       const colorMap = { success: 'var(--vscode-testing-iconPassed)', failure: 'var(--vscode-testing-iconFailed)', error: 'var(--vscode-errorForeground)', rejected: 'var(--vscode-descriptionForeground)' };
@@ -545,6 +577,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       div.className = 'result-card result-' + status;
       let html = '<div class="result-title"><span class="codicon codicon-' + icon + '" style="color:' + color + '"></span> ' + title + '</div>';
       if (detail) html += '<div class="result-detail">' + escapeHtml(detail) + '</div>';
+
+      if (status === 'failure' && command) {
+        lastFailedOutput = { command: command, stdout: stdout, stderr: stderr };
+        html += '<div class="action-bar"><button class="btn-primary" onclick="autoFix()"><span class="codicon codicon-bug"></span> Auto-Fix Error</button></div>';
+      }
+
       div.innerHTML = html;
       chatContainer.appendChild(div);
       scrollToBottom();
@@ -600,6 +638,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     function rejectEdit() { vscode.postMessage({ type: 'rejectEdit' }); removeLastActionBar(); }
     function viewDiff() { vscode.postMessage({ type: 'viewDiff' }); }
 
+    function autoFix() {
+      if (lastFailedOutput) {
+        vscode.postMessage({ type: 'autoFix', ...lastFailedOutput });
+      }
+    }
+
     function removeLastActionBar() {
       const bars = document.querySelectorAll('.action-bar');
       if (bars.length > 0) bars[bars.length - 1].remove();
@@ -621,21 +665,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     window.addEventListener('message', function(event) {
       const msg = event.data;
       switch (msg.type) {
-        case 'status':
-          setStatus(msg.text);
-          break;
-        case 'response':
-          addAssistantMessage(msg.text);
-          break;
-        case 'result':
-          addResultCard(msg.status, msg.title, msg.detail, msg.stdout, msg.stderr, msg.exitCode, msg.durationMs);
-          break;
-        case 'command':
-          addCommandCard(msg.command, msg.description, msg.cwd);
-          break;
-        case 'edit':
-          addEditCard(msg.filePath, msg.instruction, msg.changes);
-          break;
+        case 'status': setStatus(msg.text); break;
+        case 'response': addAssistantMessage(msg.text); break;
+        case 'result': addResultCard(msg.status, msg.title, msg.detail, msg.stdout, msg.stderr, msg.exitCode, msg.durationMs, msg.command); break;
+        case 'command': addCommandCard(msg.command, msg.description, msg.cwd); break;
+        case 'edit': addEditCard(msg.filePath, msg.instruction, msg.changes); break;
       }
     });
   </script>
