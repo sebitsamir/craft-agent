@@ -163,7 +163,105 @@ rl.on('line', async (line) => {
         request.params?.patch,
         { allowDirty: request.params?.allowDirty === true },
       );
-    } else if (request.method === 'chat.query') {
+    }
+    else if (request.method === 'chat.edit') {
+      const { filePath, instruction, fileContent } = request.params || {};
+      if (!filePath || !instruction) throw new Error('Missing filePath or instruction');
+
+      const { provider, source, model } = selectModelProvider();
+      const router = new CapabilityRouter([provider]);
+      await router.refreshModels();
+
+      const systemContent = 'You are a code editor. Write the requested code change. ' +
+        'Output ONLY the code itself. No explanations. No markdown. No code fences. ' +
+        'If writing a function, start with the function keyword and end with the closing brace. ' +
+        'If adding an import, write only the import statement. ' +
+        'Do not repeat unchanged code from the file. Only write what needs to be added or changed.';
+
+      const userContent = 'FILE: ' + filePath +
+        '\n\nCURRENT CONTENT (for reference only, do not repeat it):\n' + (fileContent || '(empty)') +
+        '\n\nINSTRUCTION: ' + instruction +
+        '\n\nWrite ONLY the new or changed code:';
+
+      const response = await provider.complete({
+        modelId: model || 'qwen2.5:3b',
+        messages: [
+          { role: 'system', content: systemContent },
+          { role: 'user', content: userContent }
+        ],
+        temperature: 0.1,
+        maxOutputTokens: 2048,
+      });
+
+      let newCode = response.content.trim();
+      if (newCode.startsWith('```')) {
+        newCode = newCode.replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '');
+      }
+
+      // SAFE EDIT: Only replace a stub if we can find it precisely by function name
+      let editedContent = fileContent || '';
+      let editApplied = false;
+
+      // Extract function name from the new code
+      const funcNameMatch = newCode.match(/(?:export\s+)?(?:async\s+)?function\s+(\w+)/);
+      if (funcNameMatch) {
+        const funcName = funcNameMatch[1];
+        // Find the EXACT stub: function declaration + body containing only comments
+        const stubRegex = new RegExp(
+          '((?:\\/\\*\\*[\\s\\S]*?\\*\\/\\s*)?(?:export\\s+)?(?:async\\s+)?function\\s+' + funcName + '\\s*\\([^)]*\\)\\s*\\{[^}]*\\/\\/[^}]*\\})',
+          's'
+        );
+        const stubMatch = editedContent.match(stubRegex);
+        if (stubMatch) {
+          const stubStart = editedContent.indexOf(stubMatch[0]);
+          const stubEnd = stubStart + stubMatch[0].length;
+          editedContent = editedContent.substring(0, stubStart) + newCode + editedContent.substring(stubEnd);
+          editApplied = true;
+        }
+      }
+
+      // If no stub was found/replaced, append safely
+      if (!editApplied) {
+        editedContent = editedContent.trimEnd() + '\n\n' + newCode + '\n';
+      }
+
+      // DEDUPLICATE: Remove duplicate function declarations if the model appended
+      // a function that already exists
+      const funcNames = new Set();
+      const lines = editedContent.split('\n');
+      const deduped = [];
+      let skipUntilClose = false;
+      let braceDepth = 0;
+      for (let i = 0; i < lines.length; i++) {
+        const funcMatch = lines[i].match(/(?:export\s+)?(?:async\s+)?function\s+(\w+)/);
+        if (funcMatch && funcNames.has(funcMatch[1])) {
+          // Skip this duplicate function entirely
+          skipUntilClose = true;
+          braceDepth = 0;
+          continue;
+        }
+        if (funcMatch) funcNames.add(funcMatch[1]);
+        if (skipUntilClose) {
+          for (const ch of lines[i]) {
+            if (ch === '{') braceDepth++;
+            if (ch === '}') braceDepth--;
+          }
+          if (braceDepth <= 0 && lines[i].includes('}')) skipUntilClose = false;
+          continue;
+        }
+        deduped.push(lines[i]);
+      }
+      editedContent = deduped.join('\n');
+
+      result = {
+        filePath: filePath,
+        originalContent: fileContent || '',
+        editedContent: editedContent,
+        instruction: instruction,
+        modelUsed: model || 'unknown'
+      };
+    }
+    else if (request.method === 'chat.query') {
       const { message, history, workspaceContext } = request.params || {};
       if (!message) throw new Error('Missing message');
 
