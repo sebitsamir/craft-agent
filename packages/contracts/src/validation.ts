@@ -1,4 +1,4 @@
-import { CraftError, CraftErrorCode } from './errors.js';
+import { JunubError, JunubErrorCode } from './errors.js';
 import { validateDomainId } from './domain.js';
 import type { EvidenceMethod, TaskContract, TaskImpact } from './task.js';
 import type { ArtifactLifecycleState, ArtifactVersion } from './artifact.js';
@@ -125,7 +125,7 @@ function validateOptionalNonemptyString(
   field: string,
   maxLength: number,
   subject: string,
-  errorCode: CraftErrorCode = CraftErrorCode.MALFORMED_TASK_CONTRACT,
+  errorCode: JunubErrorCode = JunubErrorCode.MALFORMED_TASK_CONTRACT,
 ): void {
   const value = container[field];
 
@@ -134,7 +134,7 @@ function validateOptionalNonemptyString(
   }
 
   if (!isNonemptyString(value, maxLength)) {
-    throw new CraftError(
+    throw new JunubError(
       errorCode,
       `${subject}.${field} must be a nonempty string of at most ${maxLength} characters when present.`,
       { field },
@@ -146,7 +146,7 @@ function validateOptionalIsoDate(
   container: Record<string, unknown>,
   field: string,
   subject: string,
-  errorCode: CraftErrorCode = CraftErrorCode.MALFORMED_TASK_CONTRACT,
+  errorCode: JunubErrorCode = JunubErrorCode.MALFORMED_TASK_CONTRACT,
 ): void {
   const value = container[field];
 
@@ -155,7 +155,7 @@ function validateOptionalIsoDate(
   }
 
   if (!isNonemptyString(value, MAX_ISO_DATE_LENGTH) || Number.isNaN(Date.parse(value))) {
-    throw new CraftError(
+    throw new JunubError(
       errorCode,
       `${subject}.${field} must be an ISO 8601 timestamp when present.`,
       { field },
@@ -169,7 +169,7 @@ function validateOptionalStringArray(
   maxItemLength: number,
   maxItems: number,
   subject: string,
-  errorCode: CraftErrorCode = CraftErrorCode.MALFORMED_TASK_CONTRACT,
+  errorCode: JunubErrorCode = JunubErrorCode.MALFORMED_TASK_CONTRACT,
 ): void {
   const value = container[field];
 
@@ -178,7 +178,7 @@ function validateOptionalStringArray(
   }
 
   if (!isStringArray(value, maxItemLength, maxItems, true)) {
-    throw new CraftError(
+    throw new JunubError(
       errorCode,
       `${subject}.${field} must be an array of nonempty strings when present.`,
       { field },
@@ -190,7 +190,7 @@ function validateOptionalRecord(
   container: Record<string, unknown>,
   field: string,
   subject: string,
-  errorCode: CraftErrorCode = CraftErrorCode.MALFORMED_TASK_CONTRACT,
+  errorCode: JunubErrorCode = JunubErrorCode.MALFORMED_TASK_CONTRACT,
 ): void {
   const value = container[field];
 
@@ -199,7 +199,7 @@ function validateOptionalRecord(
   }
 
   if (!isRecord(value)) {
-    throw new CraftError(
+    throw new JunubError(
       errorCode,
       `${subject}.${field} must be an object when present.`,
       { field },
@@ -219,14 +219,14 @@ const BUDGET_FIELDS = [
 function validateBudget(
   raw: unknown,
   subject: string,
-  errorCode: CraftErrorCode,
+  errorCode: JunubErrorCode,
 ): void {
   if (raw === undefined) {
     return;
   }
 
   if (!isRecord(raw)) {
-    throw new CraftError(errorCode, `${subject}.budget must be an object.`);
+    throw new JunubError(errorCode, `${subject}.budget must be an object.`);
   }
 
   for (const field of BUDGET_FIELDS) {
@@ -237,7 +237,7 @@ function validateBudget(
     }
 
     if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-      throw new CraftError(
+      throw new JunubError(
         errorCode,
         `${subject}.budget.${field} must be a non-negative finite number.`,
         { field },
@@ -252,8 +252,8 @@ function validateTaskDeadlines(raw: unknown): void {
   }
 
   if (!isRecord(raw)) {
-    throw new CraftError(
-      CraftErrorCode.INVALID_DEADLINE,
+    throw new JunubError(
+      JunubErrorCode.INVALID_DEADLINE,
       'task.deadlines must be an object.',
     );
   }
@@ -264,8 +264,8 @@ function validateTaskDeadlines(raw: unknown): void {
     }
 
     if (!isNonemptyString(value, MAX_ISO_DATE_LENGTH) || Number.isNaN(Date.parse(value))) {
-      throw new CraftError(
-        CraftErrorCode.INVALID_DEADLINE,
+      throw new JunubError(
+        JunubErrorCode.INVALID_DEADLINE,
         `task.deadlines.${field} must be an ISO 8601 timestamp.`,
         { field },
       );
@@ -278,8 +278,8 @@ function validateTaskDeadlines(raw: unknown): void {
   const hardStop = parseDate(raw.hardStop, 'hardStop');
 
   if (target !== undefined && hardStop !== undefined && hardStop < target) {
-    throw new CraftError(
-      CraftErrorCode.INVALID_DEADLINE,
+    throw new JunubError(
+      JunubErrorCode.INVALID_DEADLINE,
       'task.deadlines.hardStop must be after or equal to task.deadlines.target.',
       { target: raw.target, hardStop: raw.hardStop },
     );
@@ -294,15 +294,15 @@ function validateTaskDeadlines(raw: unknown): void {
  */
 export function validateTaskContract(raw: unknown): TaskContract {
   if (!isRecord(raw)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_TASK_CONTRACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_TASK_CONTRACT,
       'Task contract must be an object.',
     );
   }
 
   if (raw.schemaVersion !== 1) {
-    throw new CraftError(
-      CraftErrorCode.SCHEMA_VERSION_UNSUPPORTED,
+    throw new JunubError(
+      JunubErrorCode.SCHEMA_VERSION_UNSUPPORTED,
       `Unsupported task schemaVersion: ${String(raw.schemaVersion)}. Expected 1.`,
       { schemaVersion: raw.schemaVersion },
     );
@@ -314,15 +314,15 @@ export function validateTaskContract(raw: unknown): TaskContract {
   validateOptionalIsoDate(raw, 'updatedAt', 'task');
 
   if (!isNonemptyString(raw.title, MAX_TITLE_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_TASK_CONTRACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_TASK_CONTRACT,
       'task.title must be a nonempty string of at most 200 characters.',
     );
   }
 
   if (!isNonemptyString(raw.intent, MAX_INTENT_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_TASK_CONTRACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_TASK_CONTRACT,
       'task.intent must be a nonempty string of at most 4000 characters.',
     );
   }
@@ -335,8 +335,8 @@ export function validateTaskContract(raw: unknown): TaskContract {
       raw.domains.length < 1 ||
       raw.domains.length > MAX_DOMAINS
     ) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         `task.domains must be an array with between 1 and ${MAX_DOMAINS} domain ids.`,
       );
     }
@@ -347,8 +347,8 @@ export function validateTaskContract(raw: unknown): TaskContract {
       const domain = validateDomainId(raw.domains[index], `task.domains[${index}]`);
 
       if (domainSet.has(domain)) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_TASK_CONTRACT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_TASK_CONTRACT,
           `task.domains[${index}] duplicates domain "${domain}".`,
           { domain },
         );
@@ -358,8 +358,8 @@ export function validateTaskContract(raw: unknown): TaskContract {
     }
 
     if (!domainSet.has(primaryDomain)) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         'task.domains must include the primary task.domain value.',
         { domain: primaryDomain },
       );
@@ -367,8 +367,8 @@ export function validateTaskContract(raw: unknown): TaskContract {
   }
 
   if (typeof raw.impact !== 'string' || !IMPACTS.has(raw.impact as TaskImpact)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_TASK_CONTRACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_TASK_CONTRACT,
       'task.impact must be "low", "moderate", or "high".',
     );
   }
@@ -377,15 +377,15 @@ export function validateTaskContract(raw: unknown): TaskContract {
     raw.version !== undefined &&
     (typeof raw.version !== 'number' || !Number.isInteger(raw.version) || raw.version < 1)
   ) {
-    throw new CraftError(
-      CraftErrorCode.INVALID_TASK_VERSION,
+    throw new JunubError(
+      JunubErrorCode.INVALID_TASK_VERSION,
       'task.version must be a positive integer when present.',
     );
   }
 
   if (!Array.isArray(raw.outputs) || raw.outputs.length < 1 || raw.outputs.length > MAX_OUTPUTS) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_TASK_CONTRACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_TASK_CONTRACT,
       `task.outputs must contain between 1 and ${MAX_OUTPUTS} artifacts.`,
     );
   }
@@ -397,26 +397,26 @@ export function validateTaskContract(raw: unknown): TaskContract {
     const label = `task.outputs[${index}]`;
 
     if (!isRecord(output)) {
-      throw new CraftError(CraftErrorCode.MALFORMED_TASK_CONTRACT, `${label} must be an object.`);
+      throw new JunubError(JunubErrorCode.MALFORMED_TASK_CONTRACT, `${label} must be an object.`);
     }
 
     if (!isNonemptyString(output.kind, MAX_KIND_LENGTH)) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         `${label}.kind must be a nonempty string of at most ${MAX_KIND_LENGTH} characters.`,
       );
     }
 
     if (!isNonemptyString(output.format, MAX_FORMAT_LENGTH)) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         `${label}.format must be a nonempty string of at most ${MAX_FORMAT_LENGTH} characters.`,
       );
     }
 
     if (!isNonemptyString(output.description, MAX_DESCRIPTION_LENGTH)) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         `${label}.description must be a nonempty string of at most ${MAX_DESCRIPTION_LENGTH} characters.`,
       );
     }
@@ -425,15 +425,15 @@ export function validateTaskContract(raw: unknown): TaskContract {
 
     if (outputId !== undefined) {
       if (!isNonemptyString(outputId, MAX_ID_LENGTH)) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_TASK_CONTRACT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_TASK_CONTRACT,
           `${label}.id must be a nonempty string of at most ${MAX_ID_LENGTH} characters when present.`,
         );
       }
 
       if (seenOutputIds.has(outputId)) {
-        throw new CraftError(
-          CraftErrorCode.DUPLICATE_OUTPUT_ID,
+        throw new JunubError(
+          JunubErrorCode.DUPLICATE_OUTPUT_ID,
           `${label}.id duplicates output id "${outputId}".`,
           { outputId },
         );
@@ -443,8 +443,8 @@ export function validateTaskContract(raw: unknown): TaskContract {
     }
 
     if (output.required !== undefined && typeof output.required !== 'boolean') {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         `${label}.required must be a boolean when present.`,
       );
     }
@@ -458,8 +458,8 @@ export function validateTaskContract(raw: unknown): TaskContract {
     raw.acceptance.length < 1 ||
     raw.acceptance.length > MAX_CRITERIA
   ) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_TASK_CONTRACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_TASK_CONTRACT,
       `task.acceptance must contain between 1 and ${MAX_CRITERIA} criteria.`,
     );
   }
@@ -471,19 +471,19 @@ export function validateTaskContract(raw: unknown): TaskContract {
     const label = `task.acceptance[${index}]`;
 
     if (!isRecord(criterion)) {
-      throw new CraftError(CraftErrorCode.MALFORMED_TASK_CONTRACT, `${label} must be an object.`);
+      throw new JunubError(JunubErrorCode.MALFORMED_TASK_CONTRACT, `${label} must be an object.`);
     }
 
     if (!isNonemptyString(criterion.id, MAX_ID_LENGTH)) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         `${label}.id must be a nonempty string of at most ${MAX_ID_LENGTH} characters.`,
       );
     }
 
     if (seenCriterionIds.has(criterion.id)) {
-      throw new CraftError(
-        CraftErrorCode.DUPLICATE_CRITERION_ID,
+      throw new JunubError(
+        JunubErrorCode.DUPLICATE_CRITERION_ID,
         `Duplicate criterion id "${criterion.id}" found in acceptance criteria.`,
         { criterionId: criterion.id },
       );
@@ -492,22 +492,22 @@ export function validateTaskContract(raw: unknown): TaskContract {
     seenCriterionIds.add(criterion.id);
 
     if (!isNonemptyString(criterion.statement, MAX_STATEMENT_LENGTH)) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         `${label}.statement must be a nonempty string of at most ${MAX_STATEMENT_LENGTH} characters.`,
       );
     }
 
     if (criterion.required !== undefined && typeof criterion.required !== 'boolean') {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         `${label}.required must be a boolean when present.`,
       );
     }
 
     if (!isRecord(criterion.evidence)) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         `${label}.evidence must be an object.`,
       );
     }
@@ -518,15 +518,15 @@ export function validateTaskContract(raw: unknown): TaskContract {
       typeof evidence.method !== 'string' ||
       !EVIDENCE_METHODS.has(evidence.method as EvidenceMethod)
     ) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         `${label}.evidence.method must be one of: ${Array.from(EVIDENCE_METHODS).join(', ')}.`,
       );
     }
 
     if (!isNonemptyString(evidence.description, MAX_DESCRIPTION_LENGTH)) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         `${label}.evidence.description must be a nonempty string of at most ${MAX_DESCRIPTION_LENGTH} characters.`,
       );
     }
@@ -537,16 +537,16 @@ export function validateTaskContract(raw: unknown): TaskContract {
       requiredArtifactIds !== undefined &&
       !isStringArray(requiredArtifactIds, MAX_ID_LENGTH, MAX_ARTIFACT_IDS, true)
     ) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         `${label}.evidence.requiredArtifactIds must be an array of artifact ids when present.`,
       );
     }
   }
 
   if (raw.impact === 'high' && raw.review === undefined) {
-    throw new CraftError(
-      CraftErrorCode.MISSING_REVIEWER_ROLE,
+    throw new JunubError(
+      JunubErrorCode.MISSING_REVIEWER_ROLE,
       'High-impact tasks require a review object with a named qualified-reviewer role.',
     );
   }
@@ -555,23 +555,23 @@ export function validateTaskContract(raw: unknown): TaskContract {
     const review = raw.review;
 
     if (!isRecord(review)) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         'task.review must be an object.',
       );
     }
 
     if (typeof review.required !== 'boolean') {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         'task.review.required must be a boolean.',
       );
     }
 
     // High-impact tasks cannot opt out of review.
     if (raw.impact === 'high' && review.required !== true) {
-      throw new CraftError(
-        CraftErrorCode.MISSING_REVIEWER_ROLE,
+      throw new JunubError(
+        JunubErrorCode.MISSING_REVIEWER_ROLE,
         'High-impact tasks require review.required=true and a named qualified-reviewer role.',
       );
     }
@@ -582,8 +582,8 @@ export function validateTaskContract(raw: unknown): TaskContract {
 
     if (role !== undefined) {
       if (!isNonemptyString(role, MAX_ROLE_LENGTH)) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_TASK_CONTRACT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_TASK_CONTRACT,
           'task.review.role must be a nonempty string when present.',
         );
       }
@@ -595,16 +595,16 @@ export function validateTaskContract(raw: unknown): TaskContract {
 
     if (roles !== undefined) {
       if (!isStringArray(roles, MAX_ROLE_LENGTH, MAX_ROLES, true)) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_TASK_CONTRACT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_TASK_CONTRACT,
           'task.review.roles must be an array of nonempty role strings when present.',
         );
       }
 
       for (const roleValue of roles) {
         if (reviewRoles.has(roleValue)) {
-          throw new CraftError(
-            CraftErrorCode.MALFORMED_TASK_CONTRACT,
+          throw new JunubError(
+            JunubErrorCode.MALFORMED_TASK_CONTRACT,
             `task.review.roles duplicates role "${roleValue}".`,
             { role: roleValue },
           );
@@ -616,20 +616,20 @@ export function validateTaskContract(raw: unknown): TaskContract {
 
     if (review.required && reviewRoles.size === 0) {
       if (raw.impact === 'high') {
-        throw new CraftError(
-          CraftErrorCode.MISSING_REVIEWER_ROLE,
+        throw new JunubError(
+          JunubErrorCode.MISSING_REVIEWER_ROLE,
           'High-impact tasks require a named qualified-reviewer role in review.role or review.roles.',
         );
       }
 
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_TASK_CONTRACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_TASK_CONTRACT,
         'task.review.required=true requires at least one reviewer role.',
       );
     }
   }
 
-  validateBudget(raw.budget, 'task', CraftErrorCode.INVALID_BUDGET);
+  validateBudget(raw.budget, 'task', JunubErrorCode.INVALID_BUDGET);
   validateTaskDeadlines(raw.deadlines);
 
   validateOptionalStringArray(
@@ -653,7 +653,7 @@ export function validateTaskContract(raw: unknown): TaskContract {
     'policyVersion',
     MAX_POLICY_VERSION_LENGTH,
     'task',
-    CraftErrorCode.INVALID_POLICY_VERSION,
+    JunubErrorCode.INVALID_POLICY_VERSION,
   );
 
   validateOptionalRecord(raw, 'metadata', 'task');
@@ -666,19 +666,19 @@ export function validateTaskContract(raw: unknown): TaskContract {
  */
 export function validateArtifactVersion(raw: unknown): ArtifactVersion {
   if (!isRecord(raw)) {
-    throw new CraftError(CraftErrorCode.MALFORMED_ARTIFACT, 'ArtifactVersion must be an object.');
+    throw new JunubError(JunubErrorCode.MALFORMED_ARTIFACT, 'ArtifactVersion must be an object.');
   }
 
   if (!isNonemptyString(raw.id, MAX_ID_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_ARTIFACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_ARTIFACT,
       'ArtifactVersion.id must be a nonempty string.',
     );
   }
 
   if (!isNonemptyString(raw.artifactId, MAX_ID_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_ARTIFACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_ARTIFACT,
       'ArtifactVersion.artifactId must be a nonempty string.',
     );
   }
@@ -688,15 +688,15 @@ export function validateArtifactVersion(raw: unknown): ArtifactVersion {
     !Number.isInteger(raw.version) ||
     raw.version < 1
   ) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_ARTIFACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_ARTIFACT,
       'ArtifactVersion.version must be a positive integer.',
     );
   }
 
   if (typeof raw.hash !== 'string' || !HASH_REGEX.test(raw.hash)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_ARTIFACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_ARTIFACT,
       `ArtifactVersion.hash must be a ${HASH_LENGTH}-character SHA-256 hex string.`,
       { hash: raw.hash },
     );
@@ -707,8 +707,8 @@ export function validateArtifactVersion(raw: unknown): ArtifactVersion {
     !Number.isFinite(raw.sizeBytes) ||
     raw.sizeBytes < 0
   ) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_ARTIFACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_ARTIFACT,
       'ArtifactVersion.sizeBytes must be a non-negative finite number.',
     );
   }
@@ -717,8 +717,8 @@ export function validateArtifactVersion(raw: unknown): ArtifactVersion {
     typeof raw.state !== 'string' ||
     !ARTIFACT_STATES.has(raw.state as ArtifactLifecycleState)
   ) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_ARTIFACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_ARTIFACT,
       `ArtifactVersion.state must be one of: ${Array.from(ARTIFACT_STATES).join(', ')}.`,
       { state: raw.state },
     );
@@ -728,17 +728,17 @@ export function validateArtifactVersion(raw: unknown): ArtifactVersion {
     !isNonemptyString(raw.createdAt, MAX_ISO_DATE_LENGTH) ||
     Number.isNaN(Date.parse(raw.createdAt))
   ) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_ARTIFACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_ARTIFACT,
       'ArtifactVersion.createdAt must be an ISO 8601 timestamp.',
     );
   }
 
-  validateOptionalNonemptyString(raw, 'format', MAX_FORMAT_LENGTH, 'artifactVersion', CraftErrorCode.MALFORMED_ARTIFACT);
-  validateOptionalNonemptyString(raw, 'mimeType', MAX_MIME_LENGTH, 'artifactVersion', CraftErrorCode.MALFORMED_ARTIFACT);
-  validateOptionalNonemptyString(raw, 'storagePath', MAX_PATH_LENGTH, 'artifactVersion', CraftErrorCode.MALFORMED_ARTIFACT);
-  validateOptionalNonemptyString(raw, 'sourceReference', MAX_SOURCE_LENGTH, 'artifactVersion', CraftErrorCode.MALFORMED_ARTIFACT);
-  validateOptionalRecord(raw, 'metadata', 'artifactVersion', CraftErrorCode.MALFORMED_ARTIFACT);
+  validateOptionalNonemptyString(raw, 'format', MAX_FORMAT_LENGTH, 'artifactVersion', JunubErrorCode.MALFORMED_ARTIFACT);
+  validateOptionalNonemptyString(raw, 'mimeType', MAX_MIME_LENGTH, 'artifactVersion', JunubErrorCode.MALFORMED_ARTIFACT);
+  validateOptionalNonemptyString(raw, 'storagePath', MAX_PATH_LENGTH, 'artifactVersion', JunubErrorCode.MALFORMED_ARTIFACT);
+  validateOptionalNonemptyString(raw, 'sourceReference', MAX_SOURCE_LENGTH, 'artifactVersion', JunubErrorCode.MALFORMED_ARTIFACT);
+  validateOptionalRecord(raw, 'metadata', 'artifactVersion', JunubErrorCode.MALFORMED_ARTIFACT);
 
   return raw as unknown as ArtifactVersion;
 }
@@ -748,26 +748,26 @@ export function validateArtifactVersion(raw: unknown): ArtifactVersion {
  */
 export function validateEvidenceRecord(raw: unknown): EvidenceRecord {
   if (!isRecord(raw)) {
-    throw new CraftError(CraftErrorCode.MALFORMED_EVIDENCE, 'EvidenceRecord must be an object.');
+    throw new JunubError(JunubErrorCode.MALFORMED_EVIDENCE, 'EvidenceRecord must be an object.');
   }
 
   if (!isNonemptyString(raw.id, MAX_ID_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_EVIDENCE,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_EVIDENCE,
       'EvidenceRecord.id must be a nonempty string.',
     );
   }
 
   if (!isNonemptyString(raw.criterionId, MAX_ID_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_EVIDENCE,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_EVIDENCE,
       'EvidenceRecord.criterionId must be a nonempty string.',
     );
   }
 
   if (!isNonemptyString(raw.artifactId, MAX_ID_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_EVIDENCE,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_EVIDENCE,
       'EvidenceRecord.artifactId must be a nonempty string.',
     );
   }
@@ -777,15 +777,15 @@ export function validateEvidenceRecord(raw: unknown): EvidenceRecord {
     !Number.isInteger(raw.artifactVersion) ||
     raw.artifactVersion < 1
   ) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_EVIDENCE,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_EVIDENCE,
       'EvidenceRecord.artifactVersion must be a positive integer.',
     );
   }
 
   if (typeof raw.contentHash !== 'string' || !HASH_REGEX.test(raw.contentHash)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_EVIDENCE,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_EVIDENCE,
       `EvidenceRecord.contentHash must be a ${HASH_LENGTH}-character SHA-256 hex string.`,
       { contentHash: raw.contentHash },
     );
@@ -795,8 +795,8 @@ export function validateEvidenceRecord(raw: unknown): EvidenceRecord {
     typeof raw.method !== 'string' ||
     !EVIDENCE_METHODS.has(raw.method as EvidenceMethod)
   ) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_EVIDENCE,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_EVIDENCE,
       `EvidenceRecord.method must be one of: ${Array.from(EVIDENCE_METHODS).join(', ')}.`,
       { method: raw.method },
     );
@@ -806,16 +806,16 @@ export function validateEvidenceRecord(raw: unknown): EvidenceRecord {
     typeof raw.status !== 'string' ||
     !EVIDENCE_STATUSES.has(raw.status as CriterionEvidenceStatus)
   ) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_EVIDENCE,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_EVIDENCE,
       `EvidenceRecord.status must be one of: ${Array.from(EVIDENCE_STATUSES).join(', ')}.`,
       { status: raw.status },
     );
   }
 
   if (!isNonemptyString(raw.description, MAX_EVIDENCE_DESCRIPTION_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_EVIDENCE,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_EVIDENCE,
       `EvidenceRecord.description must be a nonempty string of at most ${MAX_EVIDENCE_DESCRIPTION_LENGTH} characters.`,
     );
   }
@@ -824,17 +824,17 @@ export function validateEvidenceRecord(raw: unknown): EvidenceRecord {
     !isNonemptyString(raw.recordedAt, MAX_ISO_DATE_LENGTH) ||
     Number.isNaN(Date.parse(raw.recordedAt))
   ) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_EVIDENCE,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_EVIDENCE,
       'EvidenceRecord.recordedAt must be an ISO 8601 timestamp.',
     );
   }
 
-  validateOptionalNonemptyString(raw, 'environment', MAX_ENVIRONMENT_LENGTH, 'evidenceRecord', CraftErrorCode.MALFORMED_EVIDENCE);
-  validateOptionalNonemptyString(raw, 'sourceReference', MAX_SOURCE_LENGTH, 'evidenceRecord', CraftErrorCode.MALFORMED_EVIDENCE);
-  validateOptionalNonemptyString(raw, 'boundedOutput', MAX_PATH_LENGTH, 'evidenceRecord', CraftErrorCode.MALFORMED_EVIDENCE);
-  validateOptionalNonemptyString(raw, 'reviewer', MAX_ROLE_LENGTH, 'evidenceRecord', CraftErrorCode.MALFORMED_EVIDENCE);
-  validateOptionalRecord(raw, 'details', 'evidenceRecord', CraftErrorCode.MALFORMED_EVIDENCE);
+  validateOptionalNonemptyString(raw, 'environment', MAX_ENVIRONMENT_LENGTH, 'evidenceRecord', JunubErrorCode.MALFORMED_EVIDENCE);
+  validateOptionalNonemptyString(raw, 'sourceReference', MAX_SOURCE_LENGTH, 'evidenceRecord', JunubErrorCode.MALFORMED_EVIDENCE);
+  validateOptionalNonemptyString(raw, 'boundedOutput', MAX_PATH_LENGTH, 'evidenceRecord', JunubErrorCode.MALFORMED_EVIDENCE);
+  validateOptionalNonemptyString(raw, 'reviewer', MAX_ROLE_LENGTH, 'evidenceRecord', JunubErrorCode.MALFORMED_EVIDENCE);
+  validateOptionalRecord(raw, 'details', 'evidenceRecord', JunubErrorCode.MALFORMED_EVIDENCE);
 
   return raw as unknown as EvidenceRecord;
 }
@@ -844,55 +844,55 @@ export function validateEvidenceRecord(raw: unknown): EvidenceRecord {
  */
 export function validateProject(raw: unknown): Project {
   if (!isRecord(raw)) {
-    throw new CraftError(CraftErrorCode.MALFORMED_PROJECT, 'Project must be an object.');
+    throw new JunubError(JunubErrorCode.MALFORMED_PROJECT, 'Project must be an object.');
   }
 
   if (raw.schemaVersion !== 1) {
-    throw new CraftError(
-      CraftErrorCode.SCHEMA_VERSION_UNSUPPORTED,
+    throw new JunubError(
+      JunubErrorCode.SCHEMA_VERSION_UNSUPPORTED,
       `Unsupported project schemaVersion: ${String(raw.schemaVersion)}. Expected 1.`,
       { schemaVersion: raw.schemaVersion },
     );
   }
 
   if (!isNonemptyString(raw.id, MAX_ID_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_PROJECT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_PROJECT,
       'Project.id must be a nonempty string.',
     );
   }
 
   if (!isNonemptyString(raw.name, MAX_PROJECT_NAME_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_PROJECT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_PROJECT,
       `Project.name must be a nonempty string of at most ${MAX_PROJECT_NAME_LENGTH} characters.`,
     );
   }
 
   if (!isNonemptyString(raw.owner, MAX_ID_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_PROJECT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_PROJECT,
       'Project.owner must be a nonempty string.',
     );
   }
 
   if (!isNonemptyString(raw.purpose, MAX_PROJECT_PURPOSE_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_PROJECT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_PROJECT,
       `Project.purpose must be a nonempty string of at most ${MAX_PROJECT_PURPOSE_LENGTH} characters.`,
     );
   }
 
-  validateOptionalNonemptyString(raw, 'workspaceId', MAX_ID_LENGTH, 'project', CraftErrorCode.MALFORMED_PROJECT);
-  validateOptionalIsoDate(raw, 'createdAt', 'project', CraftErrorCode.MALFORMED_PROJECT);
-  validateOptionalIsoDate(raw, 'updatedAt', 'project', CraftErrorCode.MALFORMED_PROJECT);
-  validateOptionalRecord(raw, 'metadata', 'project', CraftErrorCode.MALFORMED_PROJECT);
-  validateBudget(raw.budget, 'project', CraftErrorCode.INVALID_BUDGET);
+  validateOptionalNonemptyString(raw, 'workspaceId', MAX_ID_LENGTH, 'project', JunubErrorCode.MALFORMED_PROJECT);
+  validateOptionalIsoDate(raw, 'createdAt', 'project', JunubErrorCode.MALFORMED_PROJECT);
+  validateOptionalIsoDate(raw, 'updatedAt', 'project', JunubErrorCode.MALFORMED_PROJECT);
+  validateOptionalRecord(raw, 'metadata', 'project', JunubErrorCode.MALFORMED_PROJECT);
+  validateBudget(raw.budget, 'project', JunubErrorCode.INVALID_BUDGET);
 
   if (raw.collaborators !== undefined) {
     if (!Array.isArray(raw.collaborators) || raw.collaborators.length > MAX_COLLABORATORS) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_PROJECT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_PROJECT,
         `Project.collaborators must be an array with at most ${MAX_COLLABORATORS} entries.`,
       );
     }
@@ -902,24 +902,24 @@ export function validateProject(raw: unknown): Project {
       const label = `project.collaborators[${index}]`;
 
       if (!isRecord(collaborator)) {
-        throw new CraftError(CraftErrorCode.MALFORMED_PROJECT, `${label} must be an object.`);
+        throw new JunubError(JunubErrorCode.MALFORMED_PROJECT, `${label} must be an object.`);
       }
 
       if (!isNonemptyString(collaborator.id, MAX_ID_LENGTH)) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_PROJECT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_PROJECT,
           `${label}.id must be a nonempty string.`,
         );
       }
 
       if (!isNonemptyString(collaborator.role, MAX_ROLE_LENGTH)) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_PROJECT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_PROJECT,
           `${label}.role must be a nonempty string.`,
         );
       }
 
-      validateOptionalNonemptyString(collaborator, 'name', MAX_PROJECT_NAME_LENGTH, label, CraftErrorCode.MALFORMED_PROJECT);
+      validateOptionalNonemptyString(collaborator, 'name', MAX_PROJECT_NAME_LENGTH, label, JunubErrorCode.MALFORMED_PROJECT);
 
       const permissions = collaborator.permissions;
 
@@ -927,8 +927,8 @@ export function validateProject(raw: unknown): Project {
         permissions !== undefined &&
         !isStringArray(permissions, MAX_ROLE_LENGTH, MAX_PERMISSIONS, true)
       ) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_PROJECT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_PROJECT,
           `${label}.permissions must be a string array when present.`,
         );
       }
@@ -939,26 +939,26 @@ export function validateProject(raw: unknown): Project {
     const policy = raw.policy;
 
     if (!isRecord(policy)) {
-      throw new CraftError(CraftErrorCode.MALFORMED_PROJECT, 'Project.policy must be an object.');
+      throw new JunubError(JunubErrorCode.MALFORMED_PROJECT, 'Project.policy must be an object.');
     }
 
-    validateOptionalNonemptyString(policy, 'id', MAX_ID_LENGTH, 'project.policy', CraftErrorCode.MALFORMED_PROJECT);
-    validateOptionalNonemptyString(policy, 'version', MAX_POLICY_VERSION_LENGTH, 'project.policy', CraftErrorCode.MALFORMED_PROJECT);
-    validateOptionalNonemptyString(policy, 'name', MAX_PROJECT_NAME_LENGTH, 'project.policy', CraftErrorCode.MALFORMED_PROJECT);
+    validateOptionalNonemptyString(policy, 'id', MAX_ID_LENGTH, 'project.policy', JunubErrorCode.MALFORMED_PROJECT);
+    validateOptionalNonemptyString(policy, 'version', MAX_POLICY_VERSION_LENGTH, 'project.policy', JunubErrorCode.MALFORMED_PROJECT);
+    validateOptionalNonemptyString(policy, 'name', MAX_PROJECT_NAME_LENGTH, 'project.policy', JunubErrorCode.MALFORMED_PROJECT);
     validateOptionalStringArray(
       policy,
       'rules',
       MAX_CONSTRAINT_LENGTH,
       MAX_POLICY_RULES,
       'project.policy',
-      CraftErrorCode.MALFORMED_PROJECT,
+      JunubErrorCode.MALFORMED_PROJECT,
     );
   }
 
   if (raw.resources !== undefined) {
     if (!Array.isArray(raw.resources) || raw.resources.length > MAX_RESOURCES) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_PROJECT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_PROJECT,
         `Project.resources must be an array with at most ${MAX_RESOURCES} entries.`,
       );
     }
@@ -968,35 +968,35 @@ export function validateProject(raw: unknown): Project {
       const label = `project.resources[${index}]`;
 
       if (!isRecord(resource)) {
-        throw new CraftError(CraftErrorCode.MALFORMED_PROJECT, `${label} must be an object.`);
+        throw new JunubError(JunubErrorCode.MALFORMED_PROJECT, `${label} must be an object.`);
       }
 
       if (!isNonemptyString(resource.id, MAX_ID_LENGTH)) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_PROJECT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_PROJECT,
           `${label}.id must be a nonempty string.`,
         );
       }
 
       if (!isNonemptyString(resource.kind, MAX_KIND_LENGTH)) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_PROJECT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_PROJECT,
           `${label}.kind must be a nonempty string.`,
         );
       }
 
       if (!isNonemptyString(resource.uri, MAX_PATH_LENGTH)) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_PROJECT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_PROJECT,
           `${label}.uri must be a nonempty string.`,
         );
       }
 
-      validateOptionalNonemptyString(resource, 'description', MAX_DESCRIPTION_LENGTH, label, CraftErrorCode.MALFORMED_PROJECT);
+      validateOptionalNonemptyString(resource, 'description', MAX_DESCRIPTION_LENGTH, label, JunubErrorCode.MALFORMED_PROJECT);
 
       if (resource.readOnly !== undefined && typeof resource.readOnly !== 'boolean') {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_PROJECT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_PROJECT,
           `${label}.readOnly must be a boolean when present.`,
         );
       }
@@ -1005,8 +1005,8 @@ export function validateProject(raw: unknown): Project {
 
   if (raw.artifactLinks !== undefined) {
     if (!Array.isArray(raw.artifactLinks) || raw.artifactLinks.length > MAX_ARTIFACT_LINKS) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_PROJECT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_PROJECT,
         `Project.artifactLinks must be an array with at most ${MAX_ARTIFACT_LINKS} entries.`,
       );
     }
@@ -1016,25 +1016,25 @@ export function validateProject(raw: unknown): Project {
       const label = `project.artifactLinks[${index}]`;
 
       if (!isRecord(link)) {
-        throw new CraftError(CraftErrorCode.MALFORMED_PROJECT, `${label} must be an object.`);
+        throw new JunubError(JunubErrorCode.MALFORMED_PROJECT, `${label} must be an object.`);
       }
 
       if (!isNonemptyString(link.artifactId, MAX_ID_LENGTH)) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_PROJECT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_PROJECT,
           `${label}.artifactId must be a nonempty string.`,
         );
       }
 
-      validateOptionalNonemptyString(link, 'role', MAX_ROLE_LENGTH, label, CraftErrorCode.MALFORMED_PROJECT);
-      validateOptionalIsoDate(link, 'addedAt', label, CraftErrorCode.MALFORMED_PROJECT);
+      validateOptionalNonemptyString(link, 'role', MAX_ROLE_LENGTH, label, JunubErrorCode.MALFORMED_PROJECT);
+      validateOptionalIsoDate(link, 'addedAt', label, JunubErrorCode.MALFORMED_PROJECT);
     }
   }
 
   if (raw.history !== undefined) {
     if (!Array.isArray(raw.history) || raw.history.length > MAX_HISTORY_ENTRIES) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_PROJECT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_PROJECT,
         `Project.history must be an array with at most ${MAX_HISTORY_ENTRIES} entries.`,
       );
     }
@@ -1044,12 +1044,12 @@ export function validateProject(raw: unknown): Project {
       const label = `project.history[${index}]`;
 
       if (!isRecord(entry)) {
-        throw new CraftError(CraftErrorCode.MALFORMED_PROJECT, `${label} must be an object.`);
+        throw new JunubError(JunubErrorCode.MALFORMED_PROJECT, `${label} must be an object.`);
       }
 
       if (!isNonemptyString(entry.id, MAX_ID_LENGTH)) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_PROJECT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_PROJECT,
           `${label}.id must be a nonempty string.`,
         );
       }
@@ -1058,27 +1058,27 @@ export function validateProject(raw: unknown): Project {
         !isNonemptyString(entry.at, MAX_ISO_DATE_LENGTH) ||
         Number.isNaN(Date.parse(entry.at))
       ) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_PROJECT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_PROJECT,
           `${label}.at must be an ISO 8601 timestamp.`,
         );
       }
 
       if (!isNonemptyString(entry.kind, MAX_KIND_LENGTH)) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_PROJECT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_PROJECT,
           `${label}.kind must be a nonempty string.`,
         );
       }
 
       if (!isNonemptyString(entry.description, MAX_DESCRIPTION_LENGTH)) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_PROJECT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_PROJECT,
           `${label}.description must be a nonempty string.`,
         );
       }
 
-      validateOptionalNonemptyString(entry, 'actor', MAX_ID_LENGTH, label, CraftErrorCode.MALFORMED_PROJECT);
+      validateOptionalNonemptyString(entry, 'actor', MAX_ID_LENGTH, label, JunubErrorCode.MALFORMED_PROJECT);
     }
   }
 

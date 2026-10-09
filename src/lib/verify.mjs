@@ -1,7 +1,7 @@
 /**
  * Thin re-export wrapper.
  *
- * The real implementation now lives in @craft-agent/pack-software.
+ * The real implementation now lives in @junub-agent/pack-software.
  * This file exists so that the CLI (src/cli.mjs) continues to import
  * from './lib/verify.mjs' without any change, preserving seed parity.
  *

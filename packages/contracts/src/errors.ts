@@ -1,9 +1,9 @@
 /**
- * Stable, machine-readable error codes for the Craft Agent contract Layer.
+ * Stable, machine-readable error codes for the Junub Agent contract Layer.
  *
  * Thses codes are part of the public contract surface. Once phase 1 is accepted, renaming or removing codes should be treated as breaking change.
  */
-export const CraftErrorCode = {
+export const JunubErrorCode = {
   // Schema & Versioning
   SCHEMA_VERSION_UNSUPPORTED: 'SCHEMA_VERSION_UNSUPPORTED',
   PROTOCOL_VERSION_UNSUPPORTED: 'PROTOCOL_VERSION_UNSUPPORTED',
@@ -78,12 +78,12 @@ export const CraftErrorCode = {
   STORAGE_MIGRATION_FAILED: 'STORAGE_MIGRATION_FAILED',
 } as const;
 
-export type CraftErrorCode = (typeof CraftErrorCode)[keyof typeof CraftErrorCode];
+export type JunubErrorCode = (typeof JunubErrorCode)[keyof typeof JunubErrorCode];
 
 
 // Serialized error shape used by protocol responses and structured logs.
-export interface CraftErrorPayload {
-  readonly code: CraftErrorCode;
+export interface JunubErrorPayload {
+  readonly code: JunubErrorCode;
   readonly message: string;
   readonly details?: Record<string, unknown>;
 }
@@ -93,13 +93,13 @@ export interface CraftErrorPayload {
  *
  * Catch sites should switch on `code`, not message text.
  */
-export class CraftError extends Error {
-  readonly code: CraftErrorCode;
+export class JunubError extends Error {
+  readonly code: JunubErrorCode;
   readonly details?: Record<string, unknown>;
 
-  constructor(code: CraftErrorCode, message: string, details?: Record<string, unknown>) {
+  constructor(code: JunubErrorCode, message: string, details?: Record<string, unknown>) {
     super(`[${code}] ${message}`);
-    this.name = 'CraftError';
+    this.name = 'JunubError';
     this.code = code;
     this.details = details;
 
@@ -107,7 +107,7 @@ export class CraftError extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 
-  toJSON(): CraftErrorPayload {
+  toJSON(): JunubErrorPayload {
     return {
       code: this.code,
       message: this.message,

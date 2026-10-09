@@ -11,7 +11,7 @@ import {
   redactSecretsInObject,
 } from '../packages/knowledge/dist/index.js';
 
-import { CraftError, CraftErrorCode } from '../packages/contracts/dist/index.js';
+import { JunubError, JunubErrorCode } from '../packages/contracts/dist/index.js';
 
 // ---------------------------------------------------------------------------
 // Test helpers (duplicated here to keep the security fixture isolated)
@@ -94,7 +94,7 @@ describe('F3 Slice 3: Security and Eval Fixtures (Adversarial)', () => {
     // The planner's dangerous action guard must catch this regardless of the prompt
     await assert.rejects(
       generateReadOnlyPlan(injectedTask, { router }),
-      (err) => err instanceof CraftError && /dangerous action/i.test(err.message),
+      (err) => err instanceof JunubError && /dangerous action/i.test(err.message),
     );
   });
 
@@ -156,7 +156,7 @@ describe('F3 Slice 3: Security and Eval Fixtures (Adversarial)', () => {
         router,
         budgetLimits: { maxModelCalls: 10 }
       }),
-      (err) => err instanceof CraftError && err.code === CraftErrorCode.BUDGET_EXCEEDED,
+      (err) => err instanceof JunubError && err.code === JunubErrorCode.BUDGET_EXCEEDED,
     );
   });
 });

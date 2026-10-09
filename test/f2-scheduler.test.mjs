@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import {
-  openCraftDatabase,
+  openJunubDatabase,
   SqliteEventStore,
   SqliteActionGuard,
 } from '../packages/storage/dist/index.js';
@@ -15,7 +15,7 @@ import {
   CancellationToken,
 } from '../packages/kernel/dist/index.js';
 
-import { CraftError, CraftErrorCode } from '../packages/contracts/dist/index.js';
+import { JunubError, JunubErrorCode } from '../packages/contracts/dist/index.js';
 
 let tempDir;
 let db;
@@ -23,9 +23,9 @@ let eventStore;
 let actionGuard;
 
 before(async () => {
-  tempDir = await mkdtemp(path.join(tmpdir(), 'craft-f2-sched-'));
-  const databaseFile = path.join(tempDir, 'craft.sqlite');
-  db = openCraftDatabase(databaseFile);
+  tempDir = await mkdtemp(path.join(tmpdir(), 'junub-f2-sched-'));
+  const databaseFile = path.join(tempDir, 'junub.sqlite');
+  db = openJunubDatabase(databaseFile);
   eventStore = new SqliteEventStore(db);
   actionGuard = new SqliteActionGuard(db);
 });
@@ -70,7 +70,7 @@ test('executor does not retry FIXABLE failures', async () => {
       runner,
       { eventStore, actionGuard, sleep: async () => {} }
     ),
-    (err) => err instanceof CraftError
+    (err) => err instanceof JunubError
   );
 
   assert.equal(attempts, 1, 'FIXABLE failures must not retry');
@@ -94,7 +94,7 @@ test('executor stops cleanly when budget is exhausted', async () => {
       runner,
       { eventStore, actionGuard, sleep: async () => {} }
     ),
-    (err) => err instanceof CraftError && err.code === CraftErrorCode.BUDGET_EXCEEDED
+    (err) => err instanceof JunubError && err.code === JunubErrorCode.BUDGET_EXCEEDED
   );
 
   assert.equal(attempts, 2, 'Should stop exactly at budget limit');

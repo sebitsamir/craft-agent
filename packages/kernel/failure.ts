@@ -1,4 +1,4 @@
-import { CraftErrorCode } from "../contracts/src/errors.js";
+import { JunubErrorCode } from "../contracts/src/errors.js";
 /**
  * F2 failure taxonomy.
  *
@@ -48,54 +48,54 @@ export function isRetryableFailure(category: FailureCategory): boolean {
  *
  * This keeps the scheduler deterministic. It does not guess from message text.
  */
-export function classifyErrorCode(code: CraftErrorCode): FailureCategory {
+export function classifyErrorCode(code: JunubErrorCode): FailureCategory {
   switch (code) {
     // Capability/domain availability problems are unsupported-work problems.
-    case CraftErrorCode.CAPABILITY_NOT_FOUND:
-    case CraftErrorCode.CAPABILITY_UNAVAILABLE:
-    case CraftErrorCode.CAPABILITY_PLANNED:
-    case CraftErrorCode.CAPABILITY_RESTRICTED:
+    case JunubErrorCode.CAPABILITY_NOT_FOUND:
+    case JunubErrorCode.CAPABILITY_UNAVAILABLE:
+    case JunubErrorCode.CAPABILITY_PLANNED:
+    case JunubErrorCode.CAPABILITY_RESTRICTED:
       return 'UNSUPPORTED';
 
     // Policy/governance problems must not be retried blindly.
-    case CraftErrorCode.MISSING_REVIEWER_ROLE:
-    case CraftErrorCode.PROTOCOL_VERSION_UNSUPPORTED:
-    case CraftErrorCode.SCHEMA_VERSION_UNSUPPORTED:
+    case JunubErrorCode.MISSING_REVIEWER_ROLE:
+    case JunubErrorCode.PROTOCOL_VERSION_UNSUPPORTED:
+    case JunubErrorCode.SCHEMA_VERSION_UNSUPPORTED:
       return 'POLICY_BLOCKED';
 
     // Validation failures are usually fixable by changing the input/plan.
-    case CraftErrorCode.MALFORMED_TASK_CONTRACT:
-    case CraftErrorCode.DUPLICATE_CRITERION_ID:
-    case CraftErrorCode.INVALID_TASK_VERSION:
-    case CraftErrorCode.CRITERION_REMOVAL_DISALLOWED:
-    case CraftErrorCode.INVALID_BUDGET:
-    case CraftErrorCode.INVALID_DEADLINE:
-    case CraftErrorCode.INVALID_POLICY_VERSION:
-    case CraftErrorCode.MALFORMED_ARTIFACT:
-    case CraftErrorCode.MALFORMED_EVIDENCE:
-    case CraftErrorCode.ARTIFACT_VERSION_MISMATCH:
-    case CraftErrorCode.EVIDENCE_UNBOUND_CRITERION:
-    case CraftErrorCode.EVIDENCE_UNBOUND_ARTIFACT:
-    case CraftErrorCode.EVIDENCE_HASH_MISMATCH:
+    case JunubErrorCode.MALFORMED_TASK_CONTRACT:
+    case JunubErrorCode.DUPLICATE_CRITERION_ID:
+    case JunubErrorCode.INVALID_TASK_VERSION:
+    case JunubErrorCode.CRITERION_REMOVAL_DISALLOWED:
+    case JunubErrorCode.INVALID_BUDGET:
+    case JunubErrorCode.INVALID_DEADLINE:
+    case JunubErrorCode.INVALID_POLICY_VERSION:
+    case JunubErrorCode.MALFORMED_ARTIFACT:
+    case JunubErrorCode.MALFORMED_EVIDENCE:
+    case JunubErrorCode.ARTIFACT_VERSION_MISMATCH:
+    case JunubErrorCode.EVIDENCE_UNBOUND_CRITERION:
+    case JunubErrorCode.EVIDENCE_UNBOUND_ARTIFACT:
+    case JunubErrorCode.EVIDENCE_HASH_MISMATCH:
       return 'FIXABLE';
 
     // Protocol/state corruption is terminal until a human/system inspects it.
-    case CraftErrorCode.PROTOCOL_MALFORMED:
-    case CraftErrorCode.PROTOCOL_SEQUENCE_INVALID:
-    case CraftErrorCode.EVENT_MALFORMED:
-    case CraftErrorCode.EVENT_SEQUENCE_INVALID:
-    case CraftErrorCode.TASK_STATE_INVALID:
-    case CraftErrorCode.EXTERNAL_ACTION_CONFLICT:
-    case CraftErrorCode.STORAGE_MIGRATION_FAILED:
+    case JunubErrorCode.PROTOCOL_MALFORMED:
+    case JunubErrorCode.PROTOCOL_SEQUENCE_INVALID:
+    case JunubErrorCode.EVENT_MALFORMED:
+    case JunubErrorCode.EVENT_SEQUENCE_INVALID:
+    case JunubErrorCode.TASK_STATE_INVALID:
+    case JunubErrorCode.EXTERNAL_ACTION_CONFLICT:
+    case JunubErrorCode.STORAGE_MIGRATION_FAILED:
       return 'TERMINAL';
 
     // Budget exhaustion is a controlled stop, not a transient retry.
-    case CraftErrorCode.BUDGET_EXCEEDED:
+    case JunubErrorCode.BUDGET_EXCEEDED:
       return 'MISSING_INPUT';
 
     // Missing blobs can be user-restorable or storage-corruption related.
-    case CraftErrorCode.ARTIFACT_BLOB_MISSING:
-    case CraftErrorCode.ARTIFACT_HASH_MISMATCH:
+    case JunubErrorCode.ARTIFACT_BLOB_MISSING:
+    case JunubErrorCode.ARTIFACT_HASH_MISMATCH:
       return 'EXTERNAL_STATE_UNKNOWN';
 
     default:

@@ -32,7 +32,7 @@ function makeSnapshot(overrides = {}) {
 
 /** Creates a fresh temporary Git repository with one committed file. */
 async function makeRepo() {
-  const dir = await mkdtemp(path.join(tmpdir(), 'craft-s2-gate-'));
+  const dir = await mkdtemp(path.join(tmpdir(), 'junub-s2-gate-'));
   execSync('git init -b main', { cwd: dir, stdio: 'ignore' });
   execSync('git config user.email "test@example.com"', { cwd: dir, stdio: 'ignore' });
   execSync('git config user.name "Test"', { cwd: dir, stdio: 'ignore' });

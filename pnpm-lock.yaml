@@ -15,9 +15,21 @@ importers:
         specifier: ^5.7.3
         version: 5.9.3
 
+  apps/vscode:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
+      '@types/vscode':
+        specifier: ^1.85.0
+        version: 1.140.0
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+
   packages/artifacts:
     dependencies:
-      '@craft-agent/contracts':
+      '@junub-agent/contracts':
         specifier: workspace:*
         version: link:../contracts
 
@@ -25,16 +37,31 @@ importers:
 
   packages/kernel:
     dependencies:
-      '@craft-agent/contracts':
+      '@junub-agent/contracts':
         specifier: workspace:*
         version: link:../contracts
 
-  packages/storage:
+  packages/knowledge:
     dependencies:
-      '@craft-agent/contracts':
+      '@junub-agent/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@craft-agent/kernel':
+
+  packages/models:
+    dependencies:
+      '@junub-agent/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@junub-agent/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+
+  packages/storage:
+    dependencies:
+      '@junub-agent/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@junub-agent/kernel':
         specifier: workspace:*
         version: link:../kernel
       better-sqlite3:
@@ -45,13 +72,37 @@ importers:
         specifier: ^9.6.0
         version: 9.6.0
 
+  packs/film:
+    dependencies:
+      '@junub-agent/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@junub-agent/kernel':
+        specifier: workspace:*
+        version: link:../../packages/kernel
+
+  packs/software:
+    dependencies:
+      '@junub-agent/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@junub-agent/kernel':
+        specifier: workspace:*
+        version: link:../../packages/kernel
+
 packages:
 
   '@types/better-sqlite3@9.6.0':
     resolution: {integrity: sha512-ZEEwBSgMu7GYJOynoagg5X9JbxfL6dTJDsgViJIqh67jV44kyOr9RXfmFjLK5rzC4MWssP06t9hu/JwGDnUbCg==}
 
+  '@types/node@20.19.43':
+    resolution: {integrity: sha512-6oYBAi5ikg4Pl+kGsoYtawUMBT2zZMCvPNF7pVLnHZfd1zf38DRiWn/gT01RYCdUqkv7Fhr+C9ot4/tb+2sVvA==}
+
   '@types/node@22.20.4':
     resolution: {integrity: sha512-zJRE40jpHtKqE/C4fgHrAKQLJuSpzEnP9ff9Y7YtoR3Wd2pwqzlekDeEuUQXjRd+QCYnVnNwuJYmhdk9XV8gvA==}
+
+  '@types/vscode@1.140.0':
+    resolution: {integrity: sha512-KAB5RBZIgnUhpp4mKsVJPPHLOQKu6WtGy2xpfWjaajEXO4xIIC+UESAXLiQ9ewx6QD1uBmvC/S8BJzkbvv4bRA==}
 
   better-sqlite3@13.0.3:
     resolution: {integrity: sha512-RbOBxmLBG8uvFUc15X9+9SFemKcQ0WBuISBVkpuiaUB2qblC8UWlHEjdWVoZ8AdhSwmoEgsiXKfopX0CQxaACQ==}
@@ -75,9 +126,15 @@ snapshots:
     dependencies:
       '@types/node': 22.20.4
 
+  '@types/node@20.19.43':
+    dependencies:
+      undici-types: 6.21.0
+
   '@types/node@22.20.4':
     dependencies:
       undici-types: 6.21.0
+
+  '@types/vscode@1.140.0': {}
 
   better-sqlite3@13.0.3:
     dependencies:

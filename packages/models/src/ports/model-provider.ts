@@ -1,7 +1,7 @@
 /**
  * Model Provider Port
  *
- * This is the "brain socket" of Craft Agent. Every LLM, vision model,
+ * This is the "brain socket" of Junub Agent. Every LLM, vision model,
  * code-completion model, or image generator connects through this interface.
  *
  * Design principles from the Master Spec (Section 11):
@@ -210,7 +210,7 @@ export interface ModelProvider {
    * Sends a completion request and returns the response.
    *
    * Contract:
-   * - Must throw CraftError on failure, not return partial garbage.
+   * - Must throw JunubError on failure, not return partial garbage.
    * - Must report accurate usage for budget enforcement.
    * - Must not execute tools; only PROPOSE them.
    * - Must not include secrets from the request in error messages.

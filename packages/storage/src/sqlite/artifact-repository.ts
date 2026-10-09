@@ -1,6 +1,6 @@
-import { CraftError, CraftErrorCode } from '@craft-agent/contracts';
-import type { ArtifactLifecycleState, ArtifactVersion } from '@craft-agent/contracts';
-import type { CraftDatabase } from './database.js';
+import { JunubError, JunubErrorCode } from '@junub-agent/contracts';
+import type { ArtifactLifecycleState, ArtifactVersion } from '@junub-agent/contracts';
+import type { JunubDatabase } from './database.js';
 
 /**
  * SQLite metadata repository for artifact versions.
@@ -81,9 +81,9 @@ interface ArtifactVersionRow {
 }
 
 export class SqliteArtifactRepository {
-  private readonly db: CraftDatabase;
+  private readonly db: JunubDatabase;
 
-  constructor(db: CraftDatabase) {
+  constructor(db: JunubDatabase) {
     this.db = db;
   }
 
@@ -154,8 +154,8 @@ export class SqliteArtifactRepository {
         .get(artifactId) as ArtifactRow | undefined;
 
       if (!artifact) {
-        throw new CraftError(
-          CraftErrorCode.MALFORMED_ARTIFACT,
+        throw new JunubError(
+          JunubErrorCode.MALFORMED_ARTIFACT,
           `Cannot add version because artifact "${artifactId}" does not exist.`,
           { artifactId },
         );
@@ -230,8 +230,8 @@ export class SqliteArtifactRepository {
     requireNonemptyString(artifactId, 'artifactId');
 
     if (!Number.isInteger(version) || version < 1) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_ARTIFACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_ARTIFACT,
         'Artifact version must be a positive integer.',
         { version },
       );
@@ -248,8 +248,8 @@ export class SqliteArtifactRepository {
       .get(artifactId, version) as ArtifactVersionRow | undefined;
 
     if (!row) {
-      throw new CraftError(
-        CraftErrorCode.MALFORMED_ARTIFACT,
+      throw new JunubError(
+        JunubErrorCode.MALFORMED_ARTIFACT,
         `Artifact version not found: ${artifactId} v${version}.`,
         { artifactId, version },
       );
@@ -284,8 +284,8 @@ function rowToArtifactVersion(row: ArtifactVersionRow): ArtifactVersion {
  */
 function normalizeHash(value: unknown): string {
   if (typeof value !== 'string') {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_ARTIFACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_ARTIFACT,
       'Artifact hash must be a string.',
     );
   }
@@ -293,8 +293,8 @@ function normalizeHash(value: unknown): string {
   const normalized = value.toLowerCase();
 
   if (!HASH_REGEX.test(normalized)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_ARTIFACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_ARTIFACT,
       'Artifact hash must be a 64-character SHA-256 hex string.',
       { hash: value },
     );
@@ -308,8 +308,8 @@ function normalizeHash(value: unknown): string {
  */
 function requireNonNegativeInteger(value: unknown, field: string): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_ARTIFACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_ARTIFACT,
       `${field} must be a non-negative integer.`,
       { field, value },
     );
@@ -323,8 +323,8 @@ function requireNonNegativeInteger(value: unknown, field: string): number {
  */
 function requireValidState(value: unknown): ArtifactLifecycleState {
   if (typeof value !== 'string' || !ARTIFACT_STATES.has(value as ArtifactLifecycleState)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_ARTIFACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_ARTIFACT,
       `Invalid artifact state "${String(value)}".`,
       { value },
     );
@@ -338,8 +338,8 @@ function requireValidState(value: unknown): ArtifactLifecycleState {
  */
 function requireNonemptyString(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_ARTIFACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_ARTIFACT,
       `${field} must be a nonempty string.`,
       { field },
     );

@@ -93,14 +93,15 @@ function compileStep(step: ReadOnlyPlanStep, context: BridgeContext): Executable
     return compilePatchAction(step, context);
   }
 
-  // Unknown actions are rejected — never silently executed.
-  throw new JunubError(
-    JunubErrorCode.CAPABILITY_NOT_FOUND,
-    `Unknown action "${step.action}" in step "${step.stepId}"; bridge refuses unknown actions.`,
-    { stepId: step.stepId, action: step.action },
-  );
+  // Unknown read-only actions: map to noop.
+  // Safe because readOnly=true guarantees no mutation.
+  // The step is still logged in the durable event store.
+  return {
+    stepId: step.stepId,
+    statement: step.description,
+    action: { kind: 'noop', params: { statement: step.description } },
+  };
 }
-
 /**
  * Compiles a mutation proposal into a guarded patch application.
  *

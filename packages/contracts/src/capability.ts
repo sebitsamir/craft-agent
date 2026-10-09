@@ -1,4 +1,4 @@
-import { CraftError, CraftErrorCode } from './errors.js';
+import { JunubError, JunubErrorCode } from './errors.js';
 
 /**
  * Capability status reported to users and callers.
@@ -92,8 +92,8 @@ function isStringArray(
  */
 export function validateSemver(version: string): string {
   if (typeof version !== 'string' || !SEMVER_REGEX.test(version)) {
-    throw new CraftError(
-      CraftErrorCode.INVALID_SEMVER,
+    throw new JunubError(
+      JunubErrorCode.INVALID_SEMVER,
       `Invalid semantic version: "${version}". Expected format X.Y.Z with optional prerelease/build metadata.`,
       { version },
     );
@@ -111,29 +111,29 @@ export function validateSemver(version: string): string {
  */
 export function validateCapabilityManifest(raw: unknown): CapabilityPackManifest {
   if (!isRecord(raw)) {
-    throw new CraftError(
-      CraftErrorCode.INVALID_MANIFEST,
+    throw new JunubError(
+      JunubErrorCode.INVALID_MANIFEST,
       'Capability manifest must be a non-null object.',
     );
   }
 
   if (!isNonemptyString(raw.id, MAX_ID_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.INVALID_MANIFEST,
+    throw new JunubError(
+      JunubErrorCode.INVALID_MANIFEST,
       'Capability manifest requires a nonempty "id" string.',
     );
   }
 
   if (!isNonemptyString(raw.name, MAX_NAME_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.INVALID_MANIFEST,
+    throw new JunubError(
+      JunubErrorCode.INVALID_MANIFEST,
       'Capability manifest requires a nonempty "name" string.',
     );
   }
 
   if (typeof raw.version !== 'string') {
-    throw new CraftError(
-      CraftErrorCode.INVALID_MANIFEST,
+    throw new JunubError(
+      JunubErrorCode.INVALID_MANIFEST,
       'Capability manifest requires a "version" string.',
     );
   }
@@ -141,8 +141,8 @@ export function validateCapabilityManifest(raw: unknown): CapabilityPackManifest
   validateSemver(raw.version);
 
   if (!isNonemptyString(raw.domain, MAX_ID_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.INVALID_MANIFEST,
+    throw new JunubError(
+      JunubErrorCode.INVALID_MANIFEST,
       'Capability manifest requires a nonempty "domain" string.',
     );
   }
@@ -155,23 +155,23 @@ export function validateCapabilityManifest(raw: unknown): CapabilityPackManifest
   ];
 
   if (!validStatuses.includes(raw.status as CapabilityStatus)) {
-    throw new CraftError(
-      CraftErrorCode.INVALID_MANIFEST,
+    throw new JunubError(
+      JunubErrorCode.INVALID_MANIFEST,
       `Capability manifest status must be one of: ${validStatuses.join(', ')}. Received: "${String(raw.status)}".`,
       { status: raw.status },
     );
   }
 
   if (!isNonemptyString(raw.description, MAX_TEXT_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.INVALID_MANIFEST,
+    throw new JunubError(
+      JunubErrorCode.INVALID_MANIFEST,
       'Capability manifest requires a nonempty "description" string.',
     );
   }
 
   if (!Array.isArray(raw.actions)) {
-    throw new CraftError(
-      CraftErrorCode.INVALID_MANIFEST,
+    throw new JunubError(
+      JunubErrorCode.INVALID_MANIFEST,
       'Capability manifest requires an "actions" array.',
     );
   }
@@ -180,22 +180,22 @@ export function validateCapabilityManifest(raw: unknown): CapabilityPackManifest
     const action = raw.actions[index];
 
     if (!isRecord(action)) {
-      throw new CraftError(
-        CraftErrorCode.INVALID_MANIFEST,
+      throw new JunubError(
+        JunubErrorCode.INVALID_MANIFEST,
         `Action at index ${index} must be an object.`,
       );
     }
 
     if (!isNonemptyString(action.name, MAX_ID_LENGTH)) {
-      throw new CraftError(
-        CraftErrorCode.INVALID_MANIFEST,
+      throw new JunubError(
+        JunubErrorCode.INVALID_MANIFEST,
         `Action at index ${index} requires a nonempty "name".`,
       );
     }
 
     if (!isNonemptyString(action.description, MAX_TEXT_LENGTH)) {
-      throw new CraftError(
-        CraftErrorCode.INVALID_MANIFEST,
+      throw new JunubError(
+        JunubErrorCode.INVALID_MANIFEST,
         `Action "${action.name}" requires a nonempty "description".`,
       );
     }
@@ -205,37 +205,37 @@ export function validateCapabilityManifest(raw: unknown): CapabilityPackManifest
     const permissions = action.permissions;
 
     if (!isStringArray(inputs, MAX_TEXT_LENGTH, MAX_ARRAY_ITEMS, true)) {
-      throw new CraftError(
-        CraftErrorCode.INVALID_MANIFEST,
+      throw new JunubError(
+        JunubErrorCode.INVALID_MANIFEST,
         `Action "${action.name}" requires an "inputs" string array.`,
       );
     }
 
     if (!isStringArray(outputs, MAX_TEXT_LENGTH, MAX_ARRAY_ITEMS, true)) {
-      throw new CraftError(
-        CraftErrorCode.INVALID_MANIFEST,
+      throw new JunubError(
+        JunubErrorCode.INVALID_MANIFEST,
         `Action "${action.name}" requires an "outputs" string array.`,
       );
     }
 
     if (!isStringArray(permissions, MAX_TEXT_LENGTH, MAX_ARRAY_ITEMS, true)) {
-      throw new CraftError(
-        CraftErrorCode.INVALID_MANIFEST,
+      throw new JunubError(
+        JunubErrorCode.INVALID_MANIFEST,
         `Action "${action.name}" requires a "permissions" string array.`,
       );
     }
   }
 
   if (!isStringArray(raw.validators, MAX_TEXT_LENGTH, MAX_ARRAY_ITEMS, true)) {
-    throw new CraftError(
-      CraftErrorCode.INVALID_MANIFEST,
+    throw new JunubError(
+      JunubErrorCode.INVALID_MANIFEST,
       'Capability manifest requires a "validators" string array.',
     );
   }
 
   if (!isStringArray(raw.permissions, MAX_TEXT_LENGTH, MAX_ARRAY_ITEMS, true)) {
-    throw new CraftError(
-      CraftErrorCode.INVALID_MANIFEST,
+    throw new JunubError(
+      JunubErrorCode.INVALID_MANIFEST,
       'Capability manifest requires a "permissions" string array.',
     );
   }
@@ -252,16 +252,16 @@ export function validateCapabilityManifest(raw: unknown): CapabilityPackManifest
     const value = raw[field];
 
     if (value !== undefined && !isStringArray(value, MAX_TEXT_LENGTH, MAX_ARRAY_ITEMS, true)) {
-      throw new CraftError(
-        CraftErrorCode.INVALID_MANIFEST,
+      throw new JunubError(
+        JunubErrorCode.INVALID_MANIFEST,
         `Capability manifest field "${field}" must be a string array when present.`,
       );
     }
   }
 
   if (raw.compatibility !== undefined && !isNonemptyString(raw.compatibility, MAX_TEXT_LENGTH)) {
-    throw new CraftError(
-      CraftErrorCode.INVALID_MANIFEST,
+    throw new JunubError(
+      JunubErrorCode.INVALID_MANIFEST,
       'Capability manifest field "compatibility" must be a nonempty string when present.',
     );
   }
@@ -270,8 +270,8 @@ export function validateCapabilityManifest(raw: unknown): CapabilityPackManifest
     raw.maintainerSignature !== undefined &&
     !isNonemptyString(raw.maintainerSignature, MAX_TEXT_LENGTH)
   ) {
-    throw new CraftError(
-      CraftErrorCode.INVALID_MANIFEST,
+    throw new JunubError(
+      JunubErrorCode.INVALID_MANIFEST,
       'Capability manifest field "maintainerSignature" must be a nonempty string when present.',
     );
   }
@@ -300,8 +300,8 @@ export function resolveCapability(
   actionName?: string,
 ): CapabilityResolution {
   if (actionName !== undefined && actionName.trim().length === 0) {
-    throw new CraftError(
-      CraftErrorCode.CAPABILITY_NOT_FOUND,
+    throw new JunubError(
+      JunubErrorCode.CAPABILITY_NOT_FOUND,
       'Requested capability action name must be nonempty when provided.',
       { domain },
     );
@@ -310,8 +310,8 @@ export function resolveCapability(
   const manifest = manifests.find((candidate) => candidate.domain === domain);
 
   if (!manifest) {
-    throw new CraftError(
-      CraftErrorCode.CAPABILITY_NOT_FOUND,
+    throw new JunubError(
+      JunubErrorCode.CAPABILITY_NOT_FOUND,
       `No capability pack registered for domain "${domain}".`,
       { domain },
     );
@@ -319,22 +319,22 @@ export function resolveCapability(
 
   switch (manifest.status) {
     case 'unavailable':
-      throw new CraftError(
-        CraftErrorCode.CAPABILITY_UNAVAILABLE,
+      throw new JunubError(
+        JunubErrorCode.CAPABILITY_UNAVAILABLE,
         `Capability pack for domain "${domain}" is currently unavailable in this environment.`,
         { domain, manifestId: manifest.id },
       );
 
     case 'planned':
-      throw new CraftError(
-        CraftErrorCode.CAPABILITY_PLANNED,
+      throw new JunubError(
+        JunubErrorCode.CAPABILITY_PLANNED,
         `Capability pack for domain "${domain}" is planned and not yet functional.`,
         { domain, manifestId: manifest.id },
       );
 
     case 'restricted':
-      throw new CraftError(
-        CraftErrorCode.CAPABILITY_RESTRICTED,
+      throw new JunubError(
+        JunubErrorCode.CAPABILITY_RESTRICTED,
         `Capability pack for domain "${domain}" is restricted and requires elevated authorization or governance.`,
         { domain, manifestId: manifest.id },
       );
@@ -347,8 +347,8 @@ export function resolveCapability(
     const action = manifest.actions.find((candidate) => candidate.name === actionName);
 
     if (!action) {
-      throw new CraftError(
-        CraftErrorCode.CAPABILITY_NOT_FOUND,
+      throw new JunubError(
+        JunubErrorCode.CAPABILITY_NOT_FOUND,
         `Action "${actionName}" not found in capability pack "${manifest.id}".`,
         { domain, manifestId: manifest.id, actionName },
       );

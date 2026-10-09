@@ -1,4 +1,4 @@
-import { CraftError, CraftErrorCode } from "./errors.js";
+import { JunubError, JunubErrorCode } from "./errors.js";
 
 /**
  * Domain identifiers are stable lowercase machine ids, not display string.
@@ -50,8 +50,8 @@ export function isKnownDomain(value: unknown): value is knownDomain {
  */
 export function validateDomainId(value: unknown, fieldName = 'domain'): string {
   if (typeof value !== 'string' || !DOMAIN_ID_REGEX.test(value)) {
-    throw new CraftError(
-    CraftErrorCode.MALFORMED_DOMAIN,
+    throw new JunubError(
+    JunubErrorCode.MALFORMED_DOMAIN,
     `${fieldName} must be a lowercase domain id matching ${DOMAIN_ID_REGEX.source}.`,
     );
   }

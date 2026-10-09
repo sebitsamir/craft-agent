@@ -1,9 +1,9 @@
 {
-  "name": "@craft-agent/artifacts",
+  "name": "@junub-agent/artifacts",
   "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Content-addressed artifact blob storage for Craft Agent.",
+  "description": "Content-addressed artifact blob storage for Junub Agent.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -14,6 +14,6 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@craft-agent/contracts": "workspace:*"
+    "@junub-agent/contracts": "workspace:*"
   }
 }

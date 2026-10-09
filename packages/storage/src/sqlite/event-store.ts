@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { CraftError, CraftErrorCode } from '@craft-agent/contracts';
+import { JunubError, JunubErrorCode } from '@junub-agent/contracts';
 import type {
   AppendTaskEventRequest,
   EventStore,
   StoredTaskEvent,
-} from '@craft-agent/kernel';
-import type { CraftDatabase } from './database.js';
+} from '@junub-agent/kernel';
+import type { JunubDatabase } from './database.js';
 /**
  * SQLite implementation of the kernel EventStore port.
  *
@@ -31,9 +31,9 @@ interface TaskEventRow {
 }
 
 export class SqliteEventStore implements EventStore {
-  private readonly db: CraftDatabase;
+  private readonly db: JunubDatabase;
 
-  constructor(db: CraftDatabase) {
+  constructor(db: JunubDatabase) {
     this.db = db;
   }
 
@@ -48,8 +48,8 @@ export class SqliteEventStore implements EventStore {
 
     // Empty idempotency keys are invalid because they would break uniqueness logic.
     if (request.idempotencyKey !== undefined && request.idempotencyKey.trim().length === 0) {
-      throw new CraftError(
-        CraftErrorCode.EVENT_MALFORMED,
+      throw new JunubError(
+        JunubErrorCode.EVENT_MALFORMED,
         'idempotencyKey must be a nonempty string when present.',
       );
     }
@@ -104,8 +104,8 @@ export class SqliteEventStore implements EventStore {
             return rowToEvent(existingByEventId);
           }
 
-          throw new CraftError(
-            CraftErrorCode.EVENT_MALFORMED,
+          throw new JunubError(
+            JunubErrorCode.EVENT_MALFORMED,
             `eventId "${eventId}" already exists with different attributes.`,
             {
               eventId,
@@ -236,8 +236,8 @@ function rowToEvent(row: TaskEventRow): StoredTaskEvent {
  */
 function requireNonemptyString(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new CraftError(
-      CraftErrorCode.EVENT_MALFORMED,
+    throw new JunubError(
+      JunubErrorCode.EVENT_MALFORMED,
       `${field} must be a nonempty string.`,
       { field },
     );

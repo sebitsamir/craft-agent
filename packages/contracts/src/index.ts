@@ -1,8 +1,8 @@
 /**
- * Public API for @craft-agent/contracts.
+ * Public API for @junub-agent/contracts.
  *
  * This package defines the universal, domain-neutral contract layer for
- * Craft Agent. It must not contain domain-specific workflow logic.
+ * Junub Agent. It must not contain domain-specific workflow logic.
  */
 
 export * from './errors.js';

@@ -1,4 +1,4 @@
-import { CraftError, CraftErrorCode } from '@craft-agent/contracts';
+import { JunubError, JunubErrorCode } from '@junub-agent/contracts';
 import type {
   ModelCapability,
   ModelDescriptor,
@@ -152,8 +152,8 @@ export class CapabilityRouter {
 
     // Step 3: No candidates means the capability is genuinely unavailable.
     if (candidates.length === 0) {
-      throw new CraftError(
-        CraftErrorCode.CAPABILITY_NOT_FOUND,
+      throw new JunubError(
+        JunubErrorCode.CAPABILITY_NOT_FOUND,
         `No model available matching constraints: ${JSON.stringify(constraints)}.`,
         { constraints },
       );
@@ -178,8 +178,8 @@ export class CapabilityRouter {
 
     // Safety check to satisfy TypeScript's strict null checks
     if (!selected) {
-      throw new CraftError(
-        CraftErrorCode.CAPABILITY_NOT_FOUND,
+      throw new JunubError(
+        JunubErrorCode.CAPABILITY_NOT_FOUND,
         'Router logic error: candidates array was empty after filtering.',
       );
     }
@@ -187,8 +187,8 @@ export class CapabilityRouter {
     // Find the provider that serves this model.
     const provider = this.providers.find((p) => p.providerId === selected.providerId);
     if (!provider) {
-      throw new CraftError(
-        CraftErrorCode.CAPABILITY_NOT_FOUND,
+      throw new JunubError(
+        JunubErrorCode.CAPABILITY_NOT_FOUND,
         `Provider "${selected.providerId}" for model "${selected.modelId}" is no longer registered.`,
       );
     }

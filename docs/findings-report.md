@@ -1,8 +1,8 @@
-# Craft Agent Starter Findings Report
+# Junub Agent Starter Findings Report
 
 **Date:** 29 September 2026  
 **Scope:** v0.3 CLI Seed and Repository Baseline Audit  
-**Author:** Craft Agent Implementation Team
+**Author:** Junub Agent Implementation Team
 
 ---
 
@@ -17,7 +17,7 @@ The v0.3 seed provides a working, dependency-free foundation for software reposi
 ### A. Missing Contracts & Schemas (Resolved in F0 / F1)
 1. **Unversioned In-Memory Schemas:**
    - *Observation:* The seed returned ad-hoc JSON objects (`schemaVersion: 1`) without formal TypeScript interfaces or runtime schema definitions.
-   - *Fix in F0:* Created `@craft-agent/contracts` with strict TypeScript definitions for `TaskContract`, `DomainMeta`, `InspectionReport`, `VerificationReport`, `ArtifactReference`, and `EvidenceRecord`.
+   - *Fix in F0:* Created `@junub-agent/contracts` with strict TypeScript definitions for `TaskContract`, `DomainMeta`, `InspectionReport`, `VerificationReport`, `ArtifactReference`, and `EvidenceRecord`.
    - *Next in F1:* Add runtime validation schemas and serialized protocol event types.
 
 2. **Artifact & Evidence Decoupling:**

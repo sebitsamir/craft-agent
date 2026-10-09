@@ -1,9 +1,9 @@
 {
-  "name": "@craft-agent/models",
+  "name": "@junub-agent/models",
   "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Model provider ports, capability routing, and read-only planning for Craft Agent.",
+  "description": "Model provider ports, capability routing, and read-only planning for Junub Agent.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -14,7 +14,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@craft-agent/contracts": "workspace:*",
-    "@craft-agent/kernel": "workspace:*"
+    "@junub-agent/contracts": "workspace:*",
+    "@junub-agent/kernel": "workspace:*"
   }
 }

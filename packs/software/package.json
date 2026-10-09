@@ -1,5 +1,5 @@
 {
-  "name": "@craft-agent/pack-software",
+  "name": "@junub-agent/pack-software",
   "version": "0.3.0",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@craft-agent/contracts": "workspace:*",
-    "@craft-agent/kernel": "workspace:*"
+    "@junub-agent/contracts": "workspace:*",
+    "@junub-agent/kernel": "workspace:*"
   }
 }

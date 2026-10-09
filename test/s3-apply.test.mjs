@@ -15,11 +15,11 @@ async function exists(p) {
 }
 
 async function makeDir() {
-  return mkdtemp(path.join(tmpdir(), 'craft-s3-apply-'));
+  return mkdtemp(path.join(tmpdir(), 'junub-s3-apply-'));
 }
 
 async function makeRepo() {
-  const dir = await mkdtemp(path.join(tmpdir(), 'craft-s3-repo-'));
+  const dir = await mkdtemp(path.join(tmpdir(), 'junub-s3-repo-'));
   execSync('git init -b main', { cwd: dir, stdio: 'ignore' });
   execSync('git config user.email "test@example.com"', { cwd: dir, stdio: 'ignore' });
   execSync('git config user.name "Test"', { cwd: dir, stdio: 'ignore' });

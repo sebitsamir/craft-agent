@@ -1,7 +1,7 @@
-# Craft Agent — Universal Creator Master Specification
+# Junub Agent — Universal Creator Master Specification
 
 **Version:** 2.0 planning baseline, 29 September 2026  
-**Working name:** Craft Agent; branding is provisional and must be checked before public use.  
+**Working name:** Junub Agent; branding is provisional and must be checked before public use.  
 **Current implementation:** v0.3 dependency-free CLI seed. It inspects software repositories, runs selected declared npm scripts, lists domain metadata, and validates a domain-neutral task contract. It does not generate films, games, medical work, legal work, or other non-software artifacts yet.  
 **North star:** A trustworthy creator that helps people turn an idea into a usable, reviewable artifact across many fields, while clearly representing what it knows, what it made, what was tested, who reviewed it, and what remains uncertain.
 
@@ -34,7 +34,7 @@ The v0.3 seed adds:
 
 Official public sources consulted on 29 September 2026, not private product code or hands-on comparative testing:
 
-| Product area | Existing strengths | What Craft Agent must prove |
+| Product area | Existing strengths | What Junub Agent must prove |
 | --- | --- | --- |
 | Cursor | Editor agent, shell, browser, checkpoints, rules, cloud and predictive Tab completion [C1][C2] | A more transparent project/evidence loop on real tasks, not merely chat or autocomplete |
 | Codex | CLI/IDE/cloud, worktrees, review, sandbox/approvals and agent workflows [O1][O2] | Cross-domain artifact contracts and quality gates, while matching reliability in the software wedge |
@@ -167,7 +167,7 @@ A pack manifest declares: id/semver, supported task intents, input/output artifa
 Legend: **NOW** exists in v0.3; **F** is foundation; **S** is software first pack; **U** is universal expansion; **R** is regulated governance; **L** is later scale. Do not create empty directories in advance.
 
 ~~~text
-craft-agent/
+junub-agent/
 ├── README.md                            NOW; honest status and setup
 ├── PRODUCT_BLUEPRINT.md                 NOW; authoritative universal spec
 ├── MASTER_PROMPT.md                     NOW; reusable phase-by-phase prompt
@@ -340,9 +340,9 @@ The product is developed in gates, not a single “build everything” prompt. E
 | **F2 — Durable kernel** | Event store, scheduler, budgets, cancel/resume, permissions, artifact store | Crash/restart and retry tests; no duplicate external action; artifact/evidence versions consistent |
 | **F3 — Trust and model foundation** | One provider, read-only planning, source provenance, secret filtering, eval/security fixtures | No unauthorized file/tool action; cited plans with bounded budget and accurate failures |
 | **S0 — Software pack extraction** | Move inspector/verifier into software pack; repository/workspace mapping | Multi-package fixture and dirty worktree handled; seed parity maintained |
-| **S1 — VS Code experience** | Task intake, map, plan, progress, diff and evidence | User can inspect/verify Craft Agent and distinguish failed, skipped and timed-out checks |
+| **S1 — VS Code experience** | Task intake, map, plan, progress, diff and evidence | User can inspect/verify Junub Agent and distinguish failed, skipped and timed-out checks |
 | **S2 — Safe editing** | Patch preconditions, worktree, approvals, scoped restore | Conflict tests, unrelated edits survive, restore scope accurate |
-| **S3 — Real software validation** | API/browser/log tools and self-hosted task loop | Fix a genuine defect in Craft Agent with before/after repro and accepted review |
+| **S3 — Real software validation** | API/browser/log tools and self-hosted task loop | Fix a genuine defect in Junub Agent with before/after repro and accepted review |
 | **S4 — Software beta** | OS sandbox, platform installers, benchmark and recovery | Cross-platform gates and repeated accepted tasks; honest known limits |
 | **U1 — Artifact/pack SDK** | Document/table/media formats, rights metadata, writing/research pack | A custom pack imports/exports an editable artifact and passes compatibility tests |
 | **U2 — Creative/education pilots** | Film script/storyboard/timeline preview, basic media adapter, lessons | A short playable rendered scene and a reviewed lesson meet their own criteria |

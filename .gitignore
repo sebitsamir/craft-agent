@@ -7,3 +7,11 @@ coverage/
 checks.json
 report.json
 domains.json
+
+# Local runtime data
+.junub/
+.vscode/
+*.bak
+node_modules/
+dist/
+

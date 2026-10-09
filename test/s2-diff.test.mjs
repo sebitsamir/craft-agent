@@ -109,7 +109,7 @@ describe('S2 Slice 2: real-git before/after diff', () => {
   let tempDir;
 
   before(async () => {
-    tempDir = await mkdtemp(path.join(tmpdir(), 'craft-s2-diff-'));
+    tempDir = await mkdtemp(path.join(tmpdir(), 'junub-s2-diff-'));
     execSync('git init -b main', { cwd: tempDir, stdio: 'ignore' });
     execSync('git config user.email "test@example.com"', { cwd: tempDir, stdio: 'ignore' });
     execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'ignore' });

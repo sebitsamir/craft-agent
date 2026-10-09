@@ -12,7 +12,7 @@ describe('S2 Slice 1: Worktree snapshot capture', () => {
 
   before(async () => {
     // Build a real Git repository with one committed file.
-    tempDir = await mkdtemp(path.join(tmpdir(), 'craft-s2-snapshot-'));
+    tempDir = await mkdtemp(path.join(tmpdir(), 'junub-s2-snapshot-'));
     execSync('git init -b main', { cwd: tempDir, stdio: 'ignore' });
     execSync('git config user.email "test@example.com"', { cwd: tempDir, stdio: 'ignore' });
     execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'ignore' });
@@ -51,7 +51,7 @@ describe('S2 Slice 1: Worktree snapshot capture', () => {
   });
 
   test('reports a non-Git directory as not a repository', async () => {
-    const nonGit = await mkdtemp(path.join(tmpdir(), 'craft-s2-nongit-'));
+    const nonGit = await mkdtemp(path.join(tmpdir(), 'junub-s2-nongit-'));
     try {
       const snap = await captureWorktreeSnapshot(nonGit);
       assert.equal(snap.isGitRepository, false);

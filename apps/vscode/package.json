@@ -42,9 +42,9 @@
         "title": "Junub Agent: Apply Film Patch"
       },
       {
-      "command": "junubAgent.viewHistory",
-      "title": "Junub Agent: View Task History"
-    }
+        "command": "junubAgent.viewHistory",
+        "title": "Junub Agent: View Task History"
+      }
     ],
     "views": {
       "explorer": [
@@ -55,15 +55,24 @@
         {
           "id": "junubAgentFilmProject",
           "name": "Junub Agent Film"
+        },
+        {
+          "type": "webview",
+          "id": "junubAgentChat",
+          "name": "Junub Agent Chat"
         }
       ]
     },
-        "configuration": {
+    "configuration": {
       "title": "Junub Agent",
       "properties": {
         "junubAgent.provider": {
           "type": "string",
-          "enum": ["dashscope", "openrouter", "ollama"],
+          "enum": [
+            "dashscope",
+            "openrouter",
+            "ollama"
+          ],
           "default": "dashscope",
           "markdownDescription": "The LLM provider to use for planning.",
           "order": 0
@@ -87,7 +96,16 @@
           "order": 3
         }
       }
-    }
+    },
+    "chatParticipants": [
+      {
+        "id": "junubAgent.chat",
+        "name": "junub",
+        "fullName": "Junub Agent",
+        "description": "Chat with the autonomous agent to plan and execute tasks",
+        "isSticky": true
+      }
+    ]
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"

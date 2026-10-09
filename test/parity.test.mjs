@@ -9,7 +9,7 @@ import { run } from '../src/lib/process.mjs';
 const cli = fileURLToPath(new URL('../src/cli.mjs', import.meta.url));
 
 test('parity: inspect with --out writes JSON report to target file', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'craft-parity-inspect-'));
+  const root = await mkdtemp(join(tmpdir(), 'junub-parity-inspect-'));
   try {
     await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'parity-test', scripts: { test: 'node -v' } }));
     const outPath = join(root, 'report.json');
@@ -28,7 +28,7 @@ test('parity: inspect with --out writes JSON report to target file', async () =>
 });
 
 test('parity: verify with --scripts and --out writes checks report and handles exit codes', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'craft-parity-verify-'));
+  const root = await mkdtemp(join(tmpdir(), 'junub-parity-verify-'));
   try {
     await writeFile(
       join(root, 'package.json'),
@@ -60,7 +60,7 @@ test('parity: verify with --scripts and --out writes checks report and handles e
 });
 
 test('parity: domains command lists registered metadata and supports --out', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'craft-parity-domains-'));
+  const root = await mkdtemp(join(tmpdir(), 'junub-parity-domains-'));
   try {
     const outPath = join(root, 'domains.json');
     const result = await run(process.execPath, [cli, 'domains', '--out', outPath], root);
@@ -81,7 +81,7 @@ test('parity: domains command lists registered metadata and supports --out', asy
 });
 
 test('parity: validate-task CLI validates tasks and reflects status codes', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'craft-parity-task-'));
+  const root = await mkdtemp(join(tmpdir(), 'junub-parity-task-'));
   try {
     const validTaskPath = join(root, 'valid-task.json');
     const invalidTaskPath = join(root, 'invalid-task.json');
@@ -139,7 +139,7 @@ test('parity: validate-task CLI validates tasks and reflects status codes', asyn
 });
 
 test('parity: CLI argument validation rejects unknown options and missing values', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'craft-parity-args-'));
+  const root = await mkdtemp(join(tmpdir(), 'junub-parity-args-'));
   try {
     // Missing scripts value
     const missingScripts = await run(process.execPath, [cli, 'verify', root, '--scripts'], root);

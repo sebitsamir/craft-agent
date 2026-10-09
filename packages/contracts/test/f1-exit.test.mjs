@@ -2,8 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  CraftError,
-  CraftErrorCode,
+  JunubError,
+  JunubErrorCode,
   validateTaskContract,
   resolveCapability,
   serializeProtocolMessage,
@@ -60,7 +60,7 @@ describe('Phase F1 exit gate', () => {
 
     assert.throws(
       () => validateTaskContract(highImpactTask),
-      (error) => error instanceof CraftError && error.code === CraftErrorCode.MISSING_REVIEWER_ROLE,
+      (error) => error instanceof JunubError && error.code === JunubErrorCode.MISSING_REVIEWER_ROLE,
     );
 
     const reviewedHighImpactTask = {
@@ -81,7 +81,7 @@ describe('Phase F1 exit gate', () => {
 
     assert.throws(
       () => validateTaskContract(invalidHighImpact),
-      (error) => error instanceof CraftError && error.code === CraftErrorCode.MISSING_REVIEWER_ROLE,
+      (error) => error instanceof JunubError && error.code === JunubErrorCode.MISSING_REVIEWER_ROLE,
     );
   });
 
@@ -101,7 +101,7 @@ describe('Phase F1 exit gate', () => {
 
     assert.throws(
       () => validateTaskContract(invalidTask),
-      (error) => error instanceof CraftError && error.code === CraftErrorCode.DUPLICATE_CRITERION_ID,
+      (error) => error instanceof JunubError && error.code === JunubErrorCode.DUPLICATE_CRITERION_ID,
     );
   });
 
@@ -131,7 +131,7 @@ describe('Phase F1 exit gate', () => {
 
     assert.throws(
       () => resolveCapability([plannedMedicineManifest], 'medicine'),
-      (error) => error instanceof CraftError && error.code === CraftErrorCode.CAPABILITY_PLANNED,
+      (error) => error instanceof JunubError && error.code === JunubErrorCode.CAPABILITY_PLANNED,
     );
   });
 

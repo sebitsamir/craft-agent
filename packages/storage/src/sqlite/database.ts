@@ -1,10 +1,10 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { CraftError, CraftErrorCode } from '@craft-agent/contracts';
+import { JunubError, JunubErrorCode } from '@junub-agent/contracts';
 
 /**
- * Opens the Craft Agent local SQLite database.
+ * Opens the Junub Agent local SQLite database.
  *
  * Design rules:
  * - WAL mode improves read concurrency and crash durability.
@@ -19,12 +19,12 @@ import { CraftError, CraftErrorCode } from '@craft-agent/contracts';
  * Exporting this type fixes TS4058 ("cannot be named") during declaration
  * emit, and lets other storage modules reference the handle cleanly.
  */
-export type CraftDatabase = InstanceType<typeof Database>;
+export type JunubDatabase = InstanceType<typeof Database>;
 
 /**
- * Opens the Craft Agent local SQLite database.
+ * Opens the Junub Agent local SQLite database.
  */
-export function openCraftDatabase(databaseFile: string): CraftDatabase {
+export function openJunubDatabase(databaseFile: string): JunubDatabase {
   // Ensure the parent directory exists before opening the SQLite file.
   mkdirSync(path.dirname(databaseFile), { recursive: true });
 
@@ -122,7 +122,7 @@ ON artifact_versions(sha256);
 /**
  * Applies all pending migrations.
  */
-function runMigrations(db: CraftDatabase): void {
+function runMigrations(db: JunubDatabase): void {
   // Migration tracking table.
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -152,8 +152,8 @@ function runMigrations(db: CraftDatabase): void {
     try {
       applyMigration();
     } catch (error) {
-      throw new CraftError(
-        CraftErrorCode.STORAGE_MIGRATION_FAILED,
+      throw new JunubError(
+        JunubErrorCode.STORAGE_MIGRATION_FAILED,
         `Failed to apply SQLite migration 001_f2_foundation: ${
           error instanceof Error ? error.message : String(error)
         }`,

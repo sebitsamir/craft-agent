@@ -9,7 +9,7 @@ import { verify } from '../src/lib/verify.mjs';
 import { run } from '../src/lib/process.mjs';
 
 test('inspect counts source and tests while excluding dependencies', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'craft-agent-'));
+  const root = await mkdtemp(join(tmpdir(), 'junub-agent-'));
   try {
     await mkdir(join(root, 'src'));
     await mkdir(join(root, 'node_modules'));
@@ -26,7 +26,7 @@ test('inspect counts source and tests while excluding dependencies', async () =>
 });
 
 test('verify runs declared scripts and rejects undeclared scripts', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'craft-agent-'));
+  const root = await mkdtemp(join(tmpdir(), 'junub-agent-'));
   try {
     await writeFile(join(root, 'package.json'), JSON.stringify({ scripts: { check: 'node -e "process.exit(0)"', test: 'node -e "process.exit(1)"' } }));
     const success = await verify(root, ['check']);
@@ -38,7 +38,7 @@ test('verify runs declared scripts and rejects undeclared scripts', async () => 
 });
 
 test('malformed manifests fail loudly instead of appearing absent', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'craft-agent-'));
+  const root = await mkdtemp(join(tmpdir(), 'junub-agent-'));
   try {
     await writeFile(join(root, 'package.json'), '{"scripts":');
     await assert.rejects(() => inspect(root), /Invalid package.json/);
@@ -46,7 +46,7 @@ test('malformed manifests fail loudly instead of appearing absent', async () => 
 });
 
 test('timeout reports a non-passing check and bounded output stays bounded', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'craft-agent-'));
+  const root = await mkdtemp(join(tmpdir(), 'junub-agent-'));
   try {
     const result = await run(process.execPath, ['-e', 'process.stdout.write("x".repeat(100000)); setInterval(() => {}, 1000)'], root, { timeoutMs: 500, maxOutputBytes: 128 });
     assert.equal(result.timedOut, true);
@@ -56,7 +56,7 @@ test('timeout reports a non-passing check and bounded output stays bounded', asy
 });
 
 test('Git inspection preserves spaces and both paths of a staged rename', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'craft-agent-git-'));
+  const root = await mkdtemp(join(tmpdir(), 'junub-agent-git-'));
   try {
     const initialized = await run('git', ['init', '-q'], root);
     if (initialized.error || initialized.exitCode !== 0) { t.skip('Git is not installed'); return; }
@@ -73,7 +73,7 @@ test('Git inspection preserves spaces and both paths of a staged rename', async 
 });
 
 test('CLI rejects a missing option value instead of writing to a flag-shaped path', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'craft-agent-cli-'));
+  const root = await mkdtemp(join(tmpdir(), 'junub-agent-cli-'));
   try {
     const cli = fileURLToPath(new URL('../src/cli.mjs', import.meta.url));
     const result = await run(process.execPath, [cli, 'inspect', root, '--out', '--scripts', 'test'], root);

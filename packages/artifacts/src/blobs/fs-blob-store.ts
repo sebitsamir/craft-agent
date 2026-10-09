@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { CraftError, CraftErrorCode } from '@craft-agent/contracts';
+import { JunubError, JunubErrorCode } from '@junub-agent/contracts';
 
 /**
  * Filesystem content-addressed blob store.
@@ -123,8 +123,8 @@ export class FsBlobStore {
 
     // Missing blob is a recoverable/storage-level error, not a generic exception.
     if (!(await fileExists(filePath))) {
-      throw new CraftError(
-        CraftErrorCode.ARTIFACT_BLOB_MISSING,
+      throw new JunubError(
+        JunubErrorCode.ARTIFACT_BLOB_MISSING,
         `Artifact blob is missing for hash "${normalized}".`,
         { sha256: normalized, filePath },
       );
@@ -139,8 +139,8 @@ export class FsBlobStore {
       const actualHash = createHash('sha256').update(bytes).digest('hex');
 
       if (actualHash !== normalized) {
-        throw new CraftError(
-          CraftErrorCode.ARTIFACT_HASH_MISMATCH,
+        throw new JunubError(
+          JunubErrorCode.ARTIFACT_HASH_MISMATCH,
           `Artifact blob hash mismatch: expected "${normalized}", got "${actualHash}".`,
           {
             expectedHash: normalized,
@@ -177,8 +177,8 @@ function requireValidHash(sha256: string): string {
   const normalized = sha256.toLowerCase();
 
   if (!HASH_REGEX.test(normalized)) {
-    throw new CraftError(
-      CraftErrorCode.MALFORMED_ARTIFACT,
+    throw new JunubError(
+      JunubErrorCode.MALFORMED_ARTIFACT,
       'Blob hash must be a 64-character SHA-256 hex string.',
       { sha256 },
     );

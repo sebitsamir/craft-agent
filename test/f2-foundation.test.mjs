@@ -7,7 +7,7 @@ import path from 'node:path';
 // Import built packages from dist.
 // This avoids needing TypeScript support in the Node test runner.
 import {
-  openCraftDatabase,
+  openJunubDatabase,
   SqliteEventStore,
   SqliteActionGuard,
   SqliteArtifactRepository,
@@ -43,13 +43,13 @@ let blobStore;
 
 before(async () => {
   // Create isolated temporary storage for this test run.
-  tempDir = await mkdtemp(path.join(tmpdir(), 'craft-f2-'));
+  tempDir = await mkdtemp(path.join(tmpdir(), 'junub-f2-'));
 
-  const databaseFile = path.join(tempDir, 'craft.sqlite');
+  const databaseFile = path.join(tempDir, 'junub.sqlite');
   const blobDir = path.join(tempDir, 'blobs');
 
   // Open SQLite and instantiate adapters.
-  db = openCraftDatabase(databaseFile);
+  db = openJunubDatabase(databaseFile);
   eventStore = new SqliteEventStore(db);
   actionGuard = new SqliteActionGuard(db);
   artifactRepo = new SqliteArtifactRepository(db);
@@ -119,8 +119,8 @@ test('event store supports durable replay after close/reopen', async () => {
   // Close and reopen the database to simulate process restart.
   await eventStore.close();
 
-  const databaseFile = path.join(tempDir, 'craft.sqlite');
-  db = openCraftDatabase(databaseFile);
+  const databaseFile = path.join(tempDir, 'junub.sqlite');
+  db = openJunubDatabase(databaseFile);
   eventStore = new SqliteEventStore(db);
   actionGuard = new SqliteActionGuard(db);
   artifactRepo = new SqliteArtifactRepository(db);
@@ -215,7 +215,7 @@ test('action guard prevents duplicate external action execution', async () => {
 
 test('blob store and artifact repository keep hash-bound versions consistent', async () => {
   const artifactId = 'artifact-f2-1';
-  const content = new TextEncoder().encode('# Craft Agent F2 artifact\n');
+  const content = new TextEncoder().encode('# Junub Agent F2 artifact\n');
 
   // Write blob bytes into content-addressed storage.
   const blob = await blobStore.writeBytes(content);

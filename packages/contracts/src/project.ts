@@ -69,7 +69,7 @@ export interface ProjectHistoryEntry {
 }
 
 /**
- * A Craft Agent project.
+ * A Junub Agent project.
  *
  * A project owns purpose, collaborators, policy, budget, resources, artifact
  * links, and history. It is not tied to a Git repository by definition.

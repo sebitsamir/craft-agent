@@ -1,9 +1,9 @@
 /**
- * Stable, machine-readable error codes for the Craft Agent contract Layer.
+ * Stable, machine-readable error codes for the Junub Agent contract Layer.
  *
  * Thses codes are part of the public contract surface. Once phase 1 is accepted, renaming or removing codes should be treated as breaking change.
  */
-export declare const CraftErrorCode: {
+export declare const JunubErrorCode: {
     readonly SCHEMA_VERSION_UNSUPPORTED: "SCHEMA_VERSION_UNSUPPORTED";
     readonly PROTOCOL_VERSION_UNSUPPORTED: "PROTOCOL_VERSION_UNSUPPORTED";
     readonly INVALID_SEMVER: "INVALID_SEMVER";
@@ -41,9 +41,9 @@ export declare const CraftErrorCode: {
     readonly ARTIFACT_HASH_MISMATCH: "ARTIFACT_HASH_MISMATCH";
     readonly STORAGE_MIGRATION_FAILED: "STORAGE_MIGRATION_FAILED";
 };
-export type CraftErrorCode = (typeof CraftErrorCode)[keyof typeof CraftErrorCode];
-export interface CraftErrorPayload {
-    readonly code: CraftErrorCode;
+export type JunubErrorCode = (typeof JunubErrorCode)[keyof typeof JunubErrorCode];
+export interface JunubErrorPayload {
+    readonly code: JunubErrorCode;
     readonly message: string;
     readonly details?: Record<string, unknown>;
 }
@@ -52,10 +52,10 @@ export interface CraftErrorPayload {
  *
  * Catch sites should switch on `code`, not message text.
  */
-export declare class CraftError extends Error {
-    readonly code: CraftErrorCode;
+export declare class JunubError extends Error {
+    readonly code: JunubErrorCode;
     readonly details?: Record<string, unknown>;
-    constructor(code: CraftErrorCode, message: string, details?: Record<string, unknown>);
-    toJSON(): CraftErrorPayload;
+    constructor(code: JunubErrorCode, message: string, details?: Record<string, unknown>);
+    toJSON(): JunubErrorPayload;
 }
 //# sourceMappingURL=errors.d.ts.map

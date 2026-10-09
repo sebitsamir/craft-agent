@@ -1,4 +1,4 @@
-import { CraftError, CraftErrorCode } from './errors.js';
+import { JunubError, JunubErrorCode } from './errors.js';
 
 /**
  * Declared task impact.
@@ -178,8 +178,8 @@ export function getTaskReviewRoles(review: TaskReview | undefined): readonly str
 export function validateTaskEvolution(previous: TaskContract, next: TaskContract): void {
   if (previous.version !== undefined && next.version !== undefined) {
     if (next.version <= previous.version) {
-      throw new CraftError(
-        CraftErrorCode.INVALID_TASK_VERSION,
+      throw new JunubError(
+        JunubErrorCode.INVALID_TASK_VERSION,
         `Next task version (${next.version}) must be strictly greater than previous version (${previous.version}).`,
         {
           previousVersion: previous.version,
@@ -195,8 +195,8 @@ export function validateTaskEvolution(previous: TaskContract, next: TaskContract
     .filter((id) => !nextCriterionIds.has(id));
 
   if (missingCriterionIds.length > 0) {
-    throw new CraftError(
-      CraftErrorCode.CRITERION_REMOVAL_DISALLOWED,
+    throw new JunubError(
+      JunubErrorCode.CRITERION_REMOVAL_DISALLOWED,
       `Acceptance criteria cannot silently disappear between task versions. Missing criteria: ${missingCriterionIds.join(', ')}.`,
       { missingCriterionIds },
     );

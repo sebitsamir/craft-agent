@@ -8,7 +8,7 @@ import {
   generateReadOnlyPlan,
 } from '../packages/models/dist/index.js';
 
-import { CraftError, CraftErrorCode } from '../packages/contracts/dist/index.js';
+import { JunubError, JunubErrorCode } from '../packages/contracts/dist/index.js';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -148,7 +148,7 @@ describe('F3 Slice 1: Model provider, routing, and read-only planning', () => {
     // The fake model does not advertise video_generation.
     await assert.rejects(
       router.route({ requiredCapabilities: ['video_generation'] }),
-      (err) => err instanceof CraftError && err.code === CraftErrorCode.CAPABILITY_NOT_FOUND,
+      (err) => err instanceof JunubError && err.code === JunubErrorCode.CAPABILITY_NOT_FOUND,
     );
   });
 
@@ -194,7 +194,7 @@ describe('F3 Slice 1: Model provider, routing, and read-only planning', () => {
 
     await assert.rejects(
       generateReadOnlyPlan(makeTask(), { router }),
-      (err) => err instanceof CraftError && /read-only/i.test(err.message),
+      (err) => err instanceof JunubError && /read-only/i.test(err.message),
     );
   });
 
@@ -215,7 +215,7 @@ describe('F3 Slice 1: Model provider, routing, and read-only planning', () => {
 
     await assert.rejects(
       generateReadOnlyPlan(makeTask(), { router }),
-      (err) => err instanceof CraftError && /dangerous action/i.test(err.message),
+      (err) => err instanceof JunubError && /dangerous action/i.test(err.message),
     );
   });
 
@@ -229,7 +229,7 @@ describe('F3 Slice 1: Model provider, routing, and read-only planning', () => {
         router,
         budgetLimits: { maxModelCalls: 1 }, // Tighter than the plan needs.
       }),
-      (err) => err instanceof CraftError && err.code === CraftErrorCode.BUDGET_EXCEEDED,
+      (err) => err instanceof JunubError && err.code === JunubErrorCode.BUDGET_EXCEEDED,
     );
   });
 

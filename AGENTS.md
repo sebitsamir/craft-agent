@@ -1,4 +1,4 @@
-# Craft Agent repository guidance
+# Junub Agent repository guidance
 
 Read PRODUCT_BLUEPRINT.md before changing architecture or expanding scope. The current code is a dependency-free v0.3 seed for a universal creator. Target directories in the blueprint are planned, not placeholders to create all at once.
 

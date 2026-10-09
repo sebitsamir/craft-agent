@@ -1,5 +1,5 @@
 /**
- * Public API for @craft-agent/storage.
+ * Public API for @junub-agent/storage.
  *
  * Storage adapters persist state.
  * They do not decide task policy.

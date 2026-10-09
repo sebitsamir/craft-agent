@@ -1,4 +1,4 @@
-import { CraftError, CraftErrorCode } from '@craft-agent/contracts'
+import { JunubError, JunubErrorCode } from '@junub-agent/contracts'
 import type {
   ModelCompletionRequest,
   ModelCompletionResponse,
@@ -180,7 +180,7 @@ export class FakeProvider implements ModelProvider {
   async complete(request: ModelCompletionRequest): Promise<ModelCompletionResponse> {
     // Simulate provider failure if configured.
     if (this.config.forceError) {
-      throw new CraftError(
+      throw new JunubError(
         this.config.forceError.code as never,
         this.config.forceError.message,
       );
@@ -208,7 +208,7 @@ export class FakeProvider implements ModelProvider {
 
     // Special case: transient-error scenario throws.
     if (scenarioName === 'transient-error') {
-      throw new CraftError(
+      throw new JunubError(
         'TRANSIENT_PROVIDER_ERROR' as never,
         'Simulated transient provider failure (rate limit).',
       );

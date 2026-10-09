@@ -6,7 +6,7 @@ import { domains } from './lib/domains.mjs';
 import { validateTask } from './lib/task-contract.mjs';
 
 function usage() {
-  return `craft-agent 0.3.0\n\nUsage:\n  node src/cli.mjs inspect [directory] [--out report.json]\n  node src/cli.mjs verify [directory] [--scripts check,test] [--out checks.json]\n  node src/cli.mjs domains [--out domains.json]\n  node src/cli.mjs validate-task task.json [--out validation.json]\n\nDomain listings are metadata, not implemented creator capabilities.\n`;
+  return `junub-agent 0.3.0\n\nUsage:\n  node src/cli.mjs inspect [directory] [--out report.json]\n  node src/cli.mjs verify [directory] [--scripts check,test] [--out checks.json]\n  node src/cli.mjs domains [--out domains.json]\n  node src/cli.mjs validate-task task.json [--out validation.json]\n\nDomain listings are metadata, not implemented creator capabilities.\n`;
 }
 
 async function main(argv) {

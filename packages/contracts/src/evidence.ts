@@ -1,4 +1,4 @@
-import { CraftError, CraftErrorCode } from './errors.js';
+import { JunubError, JunubErrorCode } from './errors.js';
 import type { TaskContract, EvidenceMethod } from './task.js';
 import type { ArtifactVersion } from './artifact.js';
 
@@ -47,7 +47,7 @@ export interface EvidenceRecord {
  * Validates that an evidence record binds accurately to a task criterion and
  * to a specific artifact version.
  *
- * This is one of the core integrity rules of Craft Agent:
+ * This is one of the core integrity rules of Junub Agent:
  * evidence must refer to exact immutable content, not to “the latest file”.
  */
 export function validateEvidenceBinding(
@@ -60,16 +60,16 @@ export function validateEvidenceBinding(
   );
 
   if (!criterionExists) {
-    throw new CraftError(
-      CraftErrorCode.EVIDENCE_UNBOUND_CRITERION,
+    throw new JunubError(
+      JunubErrorCode.EVIDENCE_UNBOUND_CRITERION,
       `Evidence references unknown criterion id "${evidence.criterionId}" in task.`,
       { criterionId: evidence.criterionId },
     );
   }
 
   if (evidence.artifactId !== artifactVersion.artifactId) {
-    throw new CraftError(
-      CraftErrorCode.EVIDENCE_UNBOUND_ARTIFACT,
+    throw new JunubError(
+      JunubErrorCode.EVIDENCE_UNBOUND_ARTIFACT,
       `Evidence artifactId "${evidence.artifactId}" does not match target artifactId "${artifactVersion.artifactId}".`,
       {
         expectedArtifactId: artifactVersion.artifactId,
@@ -79,8 +79,8 @@ export function validateEvidenceBinding(
   }
 
   if (evidence.artifactVersion !== artifactVersion.version) {
-    throw new CraftError(
-      CraftErrorCode.ARTIFACT_VERSION_MISMATCH,
+    throw new JunubError(
+      JunubErrorCode.ARTIFACT_VERSION_MISMATCH,
       `Evidence artifactVersion "${evidence.artifactVersion}" does not match target version "${artifactVersion.version}".`,
       {
         expectedVersion: artifactVersion.version,
@@ -90,8 +90,8 @@ export function validateEvidenceBinding(
   }
 
   if (evidence.contentHash.toLowerCase() !== artifactVersion.hash.toLowerCase()) {
-    throw new CraftError(
-      CraftErrorCode.EVIDENCE_HASH_MISMATCH,
+    throw new JunubError(
+      JunubErrorCode.EVIDENCE_HASH_MISMATCH,
       `Evidence contentHash "${evidence.contentHash}" does not match artifact version hash "${artifactVersion.hash}".`,
       {
         expectedHash: artifactVersion.hash,

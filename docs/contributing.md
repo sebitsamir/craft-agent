@@ -1,6 +1,6 @@
-# Contributing to Craft Agent
+# Contributing to Junub Agent
 
-Craft Agent follows phased gates defined in [PRODUCT_BLUEPRINT.md](../PRODUCT_BLUEPRINT.md) and tracked in [PHASE_LEDGER.md](../PHASE_LEDGER.md).
+Junub Agent follows phased gates defined in [PRODUCT_BLUEPRINT.md](../PRODUCT_BLUEPRINT.md) and tracked in [PHASE_LEDGER.md](../PHASE_LEDGER.md).
 
 ## Prerequisites
 

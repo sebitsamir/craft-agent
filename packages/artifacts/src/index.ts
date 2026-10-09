@@ -1,5 +1,5 @@
 /**
- * Public API for @craft-agent/artifacts.
+ * Public API for @junub-agent/artifacts.
  *
  * This package owns artifact byte storage.
  * It must not decide task policy or evidence status.

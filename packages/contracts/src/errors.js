@@ -1,9 +1,9 @@
 /**
- * Stable, machine-readable error codes for the Craft Agent contract Layer.
+ * Stable, machine-readable error codes for the Junub Agent contract Layer.
  *
  * Thses codes are part of the public contract surface. Once phase 1 is accepted, renaming or removing codes should be treated as breaking change.
  */
-export const CraftErrorCode = {
+export const JunubErrorCode = {
     // Schema & Versioning
     SCHEMA_VERSION_UNSUPPORTED: 'SCHEMA_VERSION_UNSUPPORTED',
     PROTOCOL_VERSION_UNSUPPORTED: 'PROTOCOL_VERSION_UNSUPPORTED',
@@ -67,12 +67,12 @@ export const CraftErrorCode = {
  *
  * Catch sites should switch on `code`, not message text.
  */
-export class CraftError extends Error {
+export class JunubError extends Error {
     code;
     details;
     constructor(code, message, details) {
         super(`[${code}] ${message}`);
-        this.name = 'CraftError';
+        this.name = 'JunubError';
         this.code = code;
         this.details = details;
         // Preserves prototype chain when TypeScript targets older runtimes.

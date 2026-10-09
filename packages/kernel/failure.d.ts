@@ -1,4 +1,4 @@
-import { CraftErrorCode } from "../../contracts/src/errors.ts";
+import { JunubErrorCode } from "../../contracts/src/errors.ts";
 /**
  * F2 failure taxonomy.
  *
@@ -21,5 +21,5 @@ export declare function isRetryableFailure(category: FailureCategory): boolean;
  *
  * This keeps the scheduler deterministic. It does not guess from message text.
  */
-export declare function classifyErrorCode(code: CraftErrorCode): FailureCategory;
+export declare function classifyErrorCode(code: JunubErrorCode): FailureCategory;
 //# sourceMappingURL=failure.d.ts.map

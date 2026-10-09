@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { CraftError, CraftErrorCode } from '@craft-agent/contracts';
+import { JunubError, JunubErrorCode } from '@junub-agent/contracts';
 import type {
   ActionGuard,
   CompleteExternalActionInput,
@@ -7,8 +7,8 @@ import type {
   ExternalActionReservation,
   FailExternalActionInput,
   ReserveExternalActionInput,
-} from '@craft-agent/kernel';
-import type { CraftDatabase } from './database.js';
+} from '@junub-agent/kernel';
+import type { JunubDatabase } from './database.js';
 
 /**
  * SQLite implementation of the kernel ActionGuard port.
@@ -38,9 +38,9 @@ interface ExternalActionRow {
 }
 
 export class SqliteActionGuard implements ActionGuard {
-  private readonly db: CraftDatabase;
+  private readonly db: JunubDatabase;
 
-  constructor(db: CraftDatabase) {
+  constructor(db: JunubDatabase) {
     this.db = db;
   }
 
@@ -122,8 +122,8 @@ export class SqliteActionGuard implements ActionGuard {
         .get(idempotencyKey) as ExternalActionRow | undefined;
 
       if (!existing) {
-        throw new CraftError(
-          CraftErrorCode.EXTERNAL_ACTION_CONFLICT,
+        throw new JunubError(
+          JunubErrorCode.EXTERNAL_ACTION_CONFLICT,
           `Cannot complete external action because no reservation exists for idempotency key "${idempotencyKey}".`,
           { idempotencyKey },
         );
@@ -136,8 +136,8 @@ export class SqliteActionGuard implements ActionGuard {
 
       // Completing a failed action is a conflict and requires inspection.
       if (existing.status === 'failed') {
-        throw new CraftError(
-          CraftErrorCode.EXTERNAL_ACTION_CONFLICT,
+        throw new JunubError(
+          JunubErrorCode.EXTERNAL_ACTION_CONFLICT,
           `Cannot complete external action "${idempotencyKey}" because it was already marked failed.`,
           { idempotencyKey },
         );
@@ -181,8 +181,8 @@ export class SqliteActionGuard implements ActionGuard {
         .get(idempotencyKey) as ExternalActionRow | undefined;
 
       if (!existing) {
-        throw new CraftError(
-          CraftErrorCode.EXTERNAL_ACTION_CONFLICT,
+        throw new JunubError(
+          JunubErrorCode.EXTERNAL_ACTION_CONFLICT,
           `Cannot fail external action because no reservation exists for idempotency key "${idempotencyKey}".`,
           { idempotencyKey },
         );
@@ -195,8 +195,8 @@ export class SqliteActionGuard implements ActionGuard {
 
       // Failing a completed action is a conflict and requires inspection.
       if (existing.status === 'completed') {
-        throw new CraftError(
-          CraftErrorCode.EXTERNAL_ACTION_CONFLICT,
+        throw new JunubError(
+          JunubErrorCode.EXTERNAL_ACTION_CONFLICT,
           `Cannot fail external action "${idempotencyKey}" because it was already completed.`,
           { idempotencyKey },
         );
@@ -272,8 +272,8 @@ function parseJson(value: string | null): unknown {
  */
 function requireNonemptyString(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new CraftError(
-      CraftErrorCode.EXTERNAL_ACTION_CONFLICT,
+    throw new JunubError(
+      JunubErrorCode.EXTERNAL_ACTION_CONFLICT,
       `${field} must be a nonempty string.`,
       { field },
     );
