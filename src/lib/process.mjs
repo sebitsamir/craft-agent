@@ -1,11 +1,13 @@
 import { spawn } from 'node:child_process';
+import { readFile, stat } from 'node:fs/promises';
+import { parse } from 'node:path';
 
 /**
- * Runs a known executable without a shell. Captures bounded stdout/stderr and
- * terminates the process tree after the timeout. This is not a sandbox.
+ * Runs a known executable. Captures bounded stdout/stderr and
+ * terminates the process tree after the timeout.
  */
 export async function run(executable, args, cwd, options = {}) {
-  const { timeoutMs = 120000, maxOutputBytes = 65536 } = options;
+  const { timeoutMs = 120000, maxOutputBytes = 65536, shell = false } = options;
   return new Promise((done) => {
     const started = Date.now();
     let child;
@@ -15,6 +17,7 @@ export async function run(executable, args, cwd, options = {}) {
     let truncated = false;
     let timedOut = false;
     let spawnError = null;
+
     const append = (target, chunk) => {
       const remaining = Math.max(0, maxOutputBytes - capturedBytes);
       if (chunk.length > remaining) truncated = true;
@@ -23,18 +26,28 @@ export async function run(executable, args, cwd, options = {}) {
       if (target === 'stdout') stdoutChunks.push(portion);
       else stderrChunks.push(portion);
     };
+
     try {
-      child = spawn(executable, args, {
-        cwd, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
-        detached: process.platform !== 'win32',
-      });
+      if (shell) {
+        const cmdString = [executable, ...(args || [])].join(' ');
+        child = spawn(cmdString, [], {
+          cwd, shell: true, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+        });
+      } else {
+        child = spawn(executable, args || [], {
+          cwd, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+          detached: process.platform !== 'win32',
+        });
+      }
     } catch (error) {
       done({ exitCode: null, error: error.message, stdout: '', stderr: '', truncated, timedOut, durationMs: Date.now() - started });
       return;
     }
+
     child.stdout.on('data', (chunk) => append('stdout', chunk));
     child.stderr.on('data', (chunk) => append('stderr', chunk));
     child.on('error', (error) => { spawnError = error.message; });
+
     let fallbackTimer;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -47,6 +60,7 @@ export async function run(executable, args, cwd, options = {}) {
         catch { try { child.kill('SIGKILL'); } catch {} }
       }
     }, timeoutMs);
+
     child.on('close', (code) => {
       clearTimeout(timer);
       clearTimeout(fallbackTimer);
@@ -58,4 +72,18 @@ export async function run(executable, args, cwd, options = {}) {
       });
     });
   });
+}
+
+/**
+ * Summarizes a file by returning its name, line count, size, and first line.
+ */
+export async function summarize(targetPath) {
+  const fileName = parse(targetPath).name;
+  const stats = await stat(targetPath);
+  const sizeBytes = stats.size;
+  const content = await readFile(targetPath, 'utf8');
+  const lines = content.split('\n');
+  const lineCount = lines.length;
+  const firstLine = lines[0] || '';
+  return { fileName, lineCount, sizeBytes, firstLine };
 }

@@ -163,7 +163,29 @@ rl.on('line', async (line) => {
         request.params?.patch,
         { allowDirty: request.params?.allowDirty === true },
       );
+    } else if (request.method === 'chat.run') {
+      const { command, args, cwd } = request.params || {};
+      if (!command) throw new Error('Missing command');
+
+      // Import the run function dynamically
+      const { run } = await import('./lib/process.mjs');
+
+      const workDir = cwd || process.cwd();
+      process.stderr.write('[engine] Running command: ' + command + ' ' + (args || []).join(' ') + ' in ' + workDir + '\n');
+
+      const result = await run(command, args || [], workDir, {
+        timeoutMs: 60000,
+        maxOutputBytes: 131072,
+        shell: true, //Required for Windows to run pnpm/npm .cmd scripts
+      });
+
+      process.stderr.write('[engine] Command exited with code: ' + result.exitCode + '\n');
+
+      result.success = result.exitCode === 0 && !result.error && !result.timedOut;
+      return result;
+
     }
+
     else if (request.method === 'chat.edit') {
       const { filePath, instruction, fileContent } = request.params || {};
       if (!filePath || !instruction) throw new Error('Missing filePath or instruction');

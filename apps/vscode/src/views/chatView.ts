@@ -16,17 +16,25 @@ interface PendingEdit {
   instruction: string;
 }
 
+interface PendingCommand {
+  command: string;
+  args: string[];
+  cwd: string;
+  description: string;
+}
+
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'junubAgentChat';
   private _view?: vscode.WebviewView;
   private history: ChatMessage[] = [];
   private pendingEdit: PendingEdit | null = null;
+  private pendingCommand: PendingCommand | null = null;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
     private readonly transport: EngineTransport,
     private readonly outputChannel: vscode.OutputChannel
-  ) {}
+  ) { }
 
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -44,15 +52,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         await this._applyPendingEdit();
       } else if (data.type === 'rejectEdit') {
         this.pendingEdit = null;
-        this._postMessage({ type: 'response', text: '<span class="codicon codicon-close" style="color: var(--vscode-testing-iconFailed);"></span> Edit rejected. No files were modified.' });
+        this._postMessage({ type: 'result', status: 'rejected', title: 'Edit Rejected', detail: 'No files were modified.' });
       } else if (data.type === 'viewDiff') {
         await this._showDiffPreview();
+      } else if (data.type === 'runCommand') {
+        await this._executePendingCommand();
+      } else if (data.type === 'rejectCommand') {
+        this.pendingCommand = null;
+        this._postMessage({ type: 'result', status: 'rejected', title: 'Command Cancelled', detail: 'No command was executed.' });
       }
     });
   }
 
   // -------------------------------------------------------------------------
-  // Workspace Context (unchanged)
+  // Workspace Context
   // -------------------------------------------------------------------------
   private async _readWorkspaceContext(): Promise<string> {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -117,15 +130,57 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   // -------------------------------------------------------------------------
-  // Edit Detection: Parse user message to see if they want to edit a file
+  // Command Detection
+  // -------------------------------------------------------------------------
+  private _parseCommandRequest(message: string): { command: string; args: string[]; description: string } | null {
+    const lower = message.toLowerCase();
+    if (lower.startsWith('run ') || lower.startsWith('execute ') || lower.startsWith('start ')) {
+      const cmdStr = message.replace(/^(run|execute|start)\s+/i, '').trim();
+      const commandMap: Record<string, { command: string; args: string[]; description: string }> = {
+        'tests': { command: 'npm', args: ['test'], description: 'Run all tests' },
+        'test': { command: 'npm', args: ['test'], description: 'Run all tests' },
+        'all tests': { command: 'npm', args: ['test'], description: 'Run all tests' },
+        'the tests': { command: 'npm', args: ['test'], description: 'Run all tests' },
+        'the test': { command: 'npm', args: ['test'], description: 'Run all tests' }, // <-- FIXED
+        'build': { command: 'npm', args: ['run', 'build'], description: 'Build the project' },
+        'lint': { command: 'npm', args: ['run', 'lint'], description: 'Run linter' },
+        'dev': { command: 'npm', args: ['run', 'dev'], description: 'Start dev server' },
+      };
+      const matched = commandMap[cmdStr.toLowerCase()];
+      if (matched) return matched;
+
+      const pkgTestMatch = cmdStr.match(/tests?\s+(?:for|of)\s+(?:the\s+)?(\w+)/i) || cmdStr.match(/(\w+)\s+tests?/i);
+      if (pkgTestMatch && pkgTestMatch[1]) {
+        const pkg = pkgTestMatch[1].toLowerCase();
+        const stopWords = ['the', 'all', 'my', 'some', 'these', 'those'];
+        if (!stopWords.includes(pkg)) {
+          return {
+            command: 'pnpm',
+            args: ['--filter', '@junub-agent/' + pkg, 'test'],
+            description: 'Run tests for the ' + pkg + ' package',
+          };
+        }
+      }
+
+      const parts = cmdStr.split(/\s+/).filter(p => p.length > 0);
+      if (parts.length === 0) return null;
+      return {
+        command: parts[0]!,
+        args: parts.slice(1),
+        description: 'Run: ' + cmdStr,
+      };
+    }
+    return null;
+  }
+
+  // -------------------------------------------------------------------------
+  // Edit Detection
   // -------------------------------------------------------------------------
   private _parseEditRequest(message: string): { filePath: string; instruction: string } | null {
-    // Pattern: "edit <path> to <instruction>" or "edit <path>: <instruction>"
     const editPatterns = [
       /(?:edit|modify|update|change|refactor|add to|create)\s+([^\s]+\.\w+)\s+(?:to|:|with|by)\s+(.+)/i,
       /(?:edit|modify|update|change|refactor)\s+(?:the\s+)?file\s+([^\s]+\.\w+)\s+(?:to|:|with|by)\s+(.+)/i,
     ];
-
     for (const pattern of editPatterns) {
       const match = message.match(pattern);
       if (match && match[1] && match[2]) {
@@ -142,20 +197,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this.outputChannel.appendLine('[Chat] User: ' + message);
     this.history.push({ role: 'user', content: message });
 
-    // Check if this is an edit request
-    const editRequest = this._parseEditRequest(message);
+    const cmdRequest = this._parseCommandRequest(message);
+    if (cmdRequest) {
+      await this._handleCommandRequest(cmdRequest);
+      return;
+    }
 
+    const editRequest = this._parseEditRequest(message);
     if (editRequest) {
       await this._handleEditRequest(editRequest.filePath, editRequest.instruction);
       return;
     }
 
-    // Otherwise, handle as a normal question
-    this._postMessage({ type: 'status', text: '<span class="codicon codicon-sync~spin"></span> Reading workspace...' });
+    // Normal question — show single updating status
+    this._postMessage({ type: 'status', text: 'Reading workspace context...' });
     try {
       const workspaceContext = await this._readWorkspaceContext();
-      this._postMessage({ type: 'status', text: '<span class="codicon codicon-sync~spin"></span> Thinking...' });
 
+      this._postMessage({ type: 'status', text: 'Analyzing your question...' });
       const result = await this.transport.request('chat.query', {
         message,
         history: this.history.slice(-6),
@@ -163,7 +222,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }) as any;
 
       if (result.error) {
-        this._postMessage({ type: 'response', text: '<span class="codicon codicon-error" style="color: var(--vscode-testing-iconFailed);"></span> Error: ' + result.error.message });
+        this._postMessage({ type: 'result', status: 'error', title: 'Query Failed', detail: result.error.message });
         return;
       }
 
@@ -171,7 +230,86 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       this.history.push({ role: 'assistant', content: responseText });
       this._postMessage({ type: 'response', text: this._formatMarkdown(responseText) });
     } catch (error: any) {
-      this._postMessage({ type: 'response', text: '<span class="codicon codicon-error" style="color: var(--vscode-testing-iconFailed);"></span> Error: ' + (error.message || String(error)) });
+      this._postMessage({ type: 'result', status: 'error', title: 'Query Failed', detail: error.message || String(error) });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Command Execution Flow
+  // -------------------------------------------------------------------------
+  private async _handleCommandRequest(cmd: { command: string; args: string[]; description: string }) {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '.';
+    this.pendingCommand = {
+      command: cmd.command,
+      args: cmd.args,
+      cwd: workspaceFolder,
+      description: cmd.description,
+    };
+    this._postMessage({
+      type: 'command',
+      command: cmd.command + ' ' + cmd.args.join(' '),
+      description: cmd.description,
+      cwd: workspaceFolder,
+    });
+  }
+
+  private async _executePendingCommand() {
+    if (!this.pendingCommand) {
+      this._postMessage({ type: 'result', status: 'error', title: 'No Pending Command', detail: 'No command is waiting to be executed.' });
+      return;
+    }
+
+    const cmd = this.pendingCommand;
+    this._postMessage({ type: 'status', text: 'Executing: ' + cmd.command + ' ' + cmd.args.join(' ') + '...' });
+
+    try {
+      const result = await this.transport.request('chat.run', {
+        command: cmd.command,
+        args: cmd.args,
+        cwd: cmd.cwd,
+      }) as any;
+
+      if (result.error && !result.stdout && !result.stderr) {
+        this._postMessage({ type: 'result', status: 'error', title: 'Execution Failed', detail: 'Failed to start: ' + result.error });
+        return;
+      }
+
+      const success = result.success || result.exitCode === 0;
+      const durationSec = (result.durationMs / 1000).toFixed(1);
+
+      let detail = '';
+      detail += 'Command: ' + cmd.command + ' ' + cmd.args.join(' ') + '\n';
+      detail += 'Exit code: ' + result.exitCode + '\n';
+      detail += 'Duration: ' + durationSec + 's\n';
+      if (result.timedOut) detail += 'WARNING: Command timed out.\n';
+      if (result.truncated) detail += 'NOTE: Output was truncated.\n';
+
+      if (result.stdout && result.stdout.trim()) {
+        detail += '\n--- stdout ---\n' + result.stdout.trim();
+      }
+      if (result.stderr && result.stderr.trim()) {
+        detail += '\n--- stderr ---\n' + result.stderr.trim();
+      }
+
+      this.history.push({
+        role: 'assistant',
+        content: 'Executed "' + cmd.command + ' ' + cmd.args.join(' ') + '" — ' + (success ? 'Succeeded' : 'Failed') + ' (exit ' + result.exitCode + ', ' + durationSec + 's)',
+      });
+
+      this._postMessage({
+        type: 'result',
+        status: success ? 'success' : 'failure',
+        title: success ? 'Command Succeeded' : 'Command Failed',
+        detail: detail,
+        stdout: result.stdout || '',
+        stderr: result.stderr || '',
+        exitCode: result.exitCode,
+        durationMs: result.durationMs,
+      });
+      this.pendingCommand = null;
+
+    } catch (error: any) {
+      this._postMessage({ type: 'result', status: 'error', title: 'Execution Error', detail: error.message || String(error) });
     }
   }
 
@@ -181,147 +319,100 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private async _handleEditRequest(filePath: string, instruction: string) {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceFolder) {
-      this._postMessage({ type: 'response', text: '<span class="codicon codicon-error" style="color: var(--vscode-testing-iconFailed);"></span> No workspace open.' });
+      this._postMessage({ type: 'result', status: 'error', title: 'No Workspace', detail: 'No workspace is currently open.' });
       return;
     }
-
     const fullPath = path.isAbsolute(filePath) ? filePath : path.join(workspaceFolder, filePath);
-    this.outputChannel.appendLine('[Chat] Edit request for: ' + fullPath);
 
-    // 1. Read the file
-    this._postMessage({ type: 'status', text: '<span class="codicon codicon-book"></span> Reading ' + filePath + '...' });
+    this._postMessage({ type: 'status', text: 'Reading ' + filePath + '...' });
     let fileContent = '';
     try {
       fileContent = await fs.readFile(fullPath, 'utf8');
     } catch {
-      this._postMessage({ type: 'response', text: '<span class="codicon codicon-warning" style="color: var(--vscode-editorWarning-foreground);"></span> File not found: <code>' + filePath + '</code>. Please check the path.' });
+      this._postMessage({ type: 'result', status: 'error', title: 'File Not Found', detail: 'Could not find: ' + filePath });
       return;
     }
 
-    // 2. Get workspace context
-    const workspaceContext = await this._readWorkspaceContext();
-
-    // 3. Ask LLM to edit
-    this._postMessage({ type: 'status', text: '<span class="codicon codicon-sync~spin"></span> Generating edit...' });
+    this._postMessage({ type: 'status', text: 'Generating edit for ' + filePath + '...' });
     try {
-      const result = await this.transport.request('chat.edit', {
-        filePath,
-        instruction,
-        fileContent,
-        workspaceContext,
-      }) as any;
-
+      const result = await this.transport.request('chat.edit', { filePath, instruction, fileContent }) as any;
       if (result.error) {
-        this._postMessage({ type: 'response', text: '<span class="codicon codicon-error" style="color: var(--vscode-testing-iconFailed);"></span> Error: ' + result.error.message });
+        this._postMessage({ type: 'result', status: 'error', title: 'Edit Generation Failed', detail: result.error.message });
         return;
       }
-
-      // 4. Store pending edit and show diff
       this.pendingEdit = {
         filePath: fullPath,
         originalContent: result.originalContent,
         editedContent: result.editedContent,
         instruction: result.instruction,
       };
-
       const lineDiff = this._countChangedLines(result.originalContent, result.editedContent);
-      let msg = '<h3><span class="codicon codicon-diff"></span> Proposed Edit</h3>';
-      msg += '<p><strong>File:</strong> <code>' + filePath + '</code></p>';
-      msg += '<p><strong>Instruction:</strong> ' + instruction + '</p>';
-      msg += '<p><strong>Changes:</strong> ' + lineDiff + '</p>';
-      msg += '<p><em>Use the buttons below to preview and apply the changes.</em></p>';
-
-      this._postMessage({ type: 'edit', text: msg });
-
+      this._postMessage({
+        type: 'edit',
+        filePath: filePath,
+        instruction: instruction,
+        changes: lineDiff,
+      });
     } catch (error: any) {
-      this._postMessage({ type: 'response', text: '<span class="codicon codicon-error" style="color: var(--vscode-testing-iconFailed);"></span> Error: ' + (error.message || String(error)) });
+      this._postMessage({ type: 'result', status: 'error', title: 'Edit Failed', detail: error.message || String(error) });
     }
   }
 
   private _countChangedLines(original: string, edited: string): string {
     const origLines = original.split('\n');
     const editLines = edited.split('\n');
-    let added = 0;
-    let removed = 0;
+    let added = 0, removed = 0;
     const maxLen = Math.max(origLines.length, editLines.length);
     for (let i = 0; i < maxLen; i++) {
-      const o = origLines[i];
-      const e = editLines[i];
-      if (o !== e) {
-        if (e !== undefined && (o === undefined || o !== e)) added++;
-        if (o !== undefined && (e === undefined || o !== e)) removed++;
-      }
+      if (origLines[i] !== editLines[i]) { added++; removed++; }
     }
-    return '+' + added + ' lines added, -' + removed + ' lines removed';
+    return '+' + added + ' added, -' + removed + ' removed';
   }
 
-  // -------------------------------------------------------------------------
-  // Diff Preview
-  // -------------------------------------------------------------------------
   private async _showDiffPreview() {
     if (!this.pendingEdit) return;
-
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const relativePath = workspaceFolder ? path.relative(workspaceFolder, this.pendingEdit.filePath) : this.pendingEdit.filePath;
-
-    // Write original and edited to temp files
     const tmpDir = os.tmpdir();
     const origTmp = path.join(tmpDir, 'junub-original-' + Date.now() + path.extname(this.pendingEdit.filePath));
     const editTmp = path.join(tmpDir, 'junub-edited-' + Date.now() + path.extname(this.pendingEdit.filePath));
-
     await fs.writeFile(origTmp, this.pendingEdit.originalContent, 'utf8');
     await fs.writeFile(editTmp, this.pendingEdit.editedContent, 'utf8');
-
-    const origUri = vscode.Uri.file(origTmp);
-    const editUri = vscode.Uri.file(editTmp);
-
-    await vscode.commands.executeCommand('vscode.diff', origUri, editUri, 'Junub Agent: ' + relativePath);
+    await vscode.commands.executeCommand('vscode.diff', vscode.Uri.file(origTmp), vscode.Uri.file(editTmp), 'Junub Agent: ' + relativePath);
   }
 
-  // -------------------------------------------------------------------------
-  // Apply Edit
-  // -------------------------------------------------------------------------
   private async _applyPendingEdit() {
-    if (!this.pendingEdit) {
-      this._postMessage({ type: 'response', text: '<span class="codicon codicon-error" style="color: var(--vscode-testing-iconFailed);"></span> No pending edit.' });
-      return;
-    }
-
+    if (!this.pendingEdit) return;
     try {
-      // Create backup
       const backupPath = this.pendingEdit.filePath + '.bak';
       await fs.writeFile(backupPath, this.pendingEdit.originalContent, 'utf8');
-
-      // Write the edited content
       await fs.writeFile(this.pendingEdit.filePath, this.pendingEdit.editedContent, 'utf8');
-
       const relativePath = vscode.workspace.workspaceFolders?.[0]
         ? path.relative(vscode.workspace.workspaceFolders[0].uri.fsPath, this.pendingEdit.filePath)
         : this.pendingEdit.filePath;
 
-      this._postMessage({ type: 'response', text: '<span class="codicon codicon-pass" style="color: var(--vscode-testing-iconPassed);"></span> <strong>File saved:</strong> <code>' + relativePath + '</code><br><span class="codicon codicon-shield"></span> Backup created at <code>' + path.basename(backupPath) + '</code>' });
-
-      // Open the edited file in VS Code
+      this.history.push({ role: 'assistant', content: 'Edited ' + relativePath + ': ' + this.pendingEdit.instruction });
+      this._postMessage({
+        type: 'result',
+        status: 'success',
+        title: 'File Saved Successfully',
+        detail: 'File: ' + relativePath + '\nInstruction: ' + this.pendingEdit.instruction + '\nBackup: ' + path.basename(backupPath),
+      });
       const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(this.pendingEdit.filePath));
       await vscode.window.showTextDocument(doc);
-
-      this.history.push({ role: 'assistant', content: 'Applied edit to ' + relativePath + ': ' + this.pendingEdit.instruction });
       this.pendingEdit = null;
-
     } catch (error: any) {
-      this._postMessage({ type: 'response', text: '<span class="codicon codicon-error" style="color: var(--vscode-testing-iconFailed);"></span> Failed to save: ' + (error.message || String(error)) });
+      this._postMessage({ type: 'result', status: 'error', title: 'Save Failed', detail: error.message || String(error) });
     }
   }
 
   // -------------------------------------------------------------------------
-  // Markdown formatting (unchanged)
+  // Markdown formatting
   // -------------------------------------------------------------------------
   private _formatMarkdown(text: string): string {
     let html = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(_m, _l, code) {
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function (_m, _l, code) {
       return '<pre class="code-block">' + code.trim() + '</pre>';
     });
     html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
@@ -337,14 +428,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     return '<p>' + html + '</p>';
   }
 
+  private _escapeHtml(text: string): string {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
   private _postMessage(message: any) {
-    if (this._view) {
-      this._view.webview.postMessage(message);
-    }
+    if (this._view) this._view.webview.postMessage(message);
   }
 
   // -------------------------------------------------------------------------
-  // HTML
+  // HTML — Professional persistent feedback UI
   // -------------------------------------------------------------------------
   private _getHtmlForWebview() {
     return `<!DOCTYPE html>
@@ -355,34 +448,53 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   <title>Junub Agent Chat</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codicon/0.0.36/codicon.css">
   <style>
-    body { font-family: var(--vscode-font-family); padding: 10px; margin: 0; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; color: var(--vscode-foreground); }
-    #chat-container { flex: 1; overflow-y: auto; padding: 10px; border: 1px solid var(--vscode-panel-border); border-radius: 4px; margin-bottom: 10px; background: var(--vscode-editor-background); }
-    .message { margin-bottom: 12px; padding: 10px; border-radius: 6px; line-height: 1.5; font-size: 13px; }
-    .message h3 { margin-top: 0; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-    .message p { margin: 4px 0; }
-    .message li { margin: 2px 0; }
-    .user { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); text-align: right; }
-    .assistant { background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); }
-    .status { color: var(--vscode-descriptionForeground); font-style: italic; display: flex; align-items: center; gap: 6px; padding: 4px 10px; }
-    .edit-preview { background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-textLink-foreground); }
-    .code-block { background: var(--vscode-textBlockQuote-background); padding: 10px; border-radius: 4px; font-family: var(--vscode-editor-font-family); font-size: 12px; white-space: pre-wrap; word-wrap: break-word; border-left: 3px solid var(--vscode-textLink-foreground); margin: 6px 0; overflow-x: auto; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--vscode-font-family); padding: 10px; display: flex; flex-direction: column; height: 100vh; color: var(--vscode-foreground); font-size: 13px; }
+    #chat-container { flex: 1; overflow-y: auto; padding: 8px; border: 1px solid var(--vscode-panel-border); border-radius: 6px; margin-bottom: 8px; background: var(--vscode-editor-background); }
+
+    .msg { margin-bottom: 10px; padding: 10px 12px; border-radius: 6px; line-height: 1.5; }
+    .msg-user { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); text-align: right; border-radius: 6px 6px 2px 6px; }
+    .msg-assistant { background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); border-radius: 6px 6px 6px 2px; }
+
+    .status-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; margin-bottom: 10px; color: var(--vscode-descriptionForeground); font-style: italic; border-radius: 4px; background: var(--vscode-editorWidget-background); border: 1px dashed var(--vscode-panel-border); }
+    .status-bar .codicon { animation: spin 1s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    .result-card { margin-bottom: 10px; padding: 12px; border-radius: 6px; border-left: 4px solid; }
+    .result-success { border-left-color: var(--vscode-testing-iconPassed); background: var(--vscode-editorWidget-background); }
+    .result-failure { border-left-color: var(--vscode-testing-iconFailed); background: var(--vscode-editorWidget-background); }
+    .result-error { border-left-color: var(--vscode-errorForeground); background: var(--vscode-editorWidget-background); }
+    .result-rejected { border-left-color: var(--vscode-descriptionForeground); background: var(--vscode-editorWidget-background); }
+    .result-title { font-weight: bold; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+    .result-detail { white-space: pre-wrap; font-family: var(--vscode-editor-font-family); font-size: 12px; background: var(--vscode-textBlockQuote-background); padding: 8px; border-radius: 4px; margin-top: 6px; max-height: 300px; overflow-y: auto; }
+
+    .action-card { margin-bottom: 10px; padding: 12px; border-radius: 6px; background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-textLink-foreground); }
+    .action-card h4 { margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+    .action-card p { margin: 4px 0; }
+    .action-card code { background: var(--vscode-textBlockQuote-background); padding: 1px 5px; border-radius: 3px; font-family: var(--vscode-editor-font-family); font-size: 12px; }
+
+    .action-bar { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .action-bar button { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px; font-weight: bold; }
+    .btn-primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+    .btn-primary:hover { background: var(--vscode-button-hoverBackground); }
+    .btn-success { background: var(--vscode-testing-iconPassed); color: white; }
+    .btn-danger { background: var(--vscode-testing-iconFailed); color: white; }
+    .btn-secondary { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
+
+    .code-block { background: var(--vscode-textBlockQuote-background); padding: 10px; border-radius: 4px; font-family: var(--vscode-editor-font-family); font-size: 12px; white-space: pre-wrap; word-wrap: break-word; border-left: 3px solid var(--vscode-textLink-foreground); margin: 6px 0; overflow-x: auto; max-height: 300px; overflow-y: auto; }
     .inline-code { background: var(--vscode-textBlockQuote-background); padding: 1px 5px; border-radius: 3px; font-family: var(--vscode-editor-font-family); font-size: 12px; }
+
     #input-area { display: flex; gap: 8px; }
-    #message-input { flex: 1; padding: 8px; border: 1px solid var(--vscode-input-border); background: var(--vscode-input-background); color: var(--vscode-input-foreground); border-radius: 4px; font-family: var(--vscode-font-family); font-size: 13px; }
+    #message-input { flex: 1; padding: 8px 10px; border: 1px solid var(--vscode-input-border); background: var(--vscode-input-background); color: var(--vscode-input-foreground); border-radius: 4px; font-family: var(--vscode-font-family); font-size: 13px; }
     #send-btn { padding: 8px 16px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: bold; }
     #send-btn:hover { background: var(--vscode-button-hoverBackground); }
-    .edit-actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
-    .edit-actions button { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px; font-weight: bold; }
-    .btn-diff { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
-    .btn-approve { background: var(--vscode-testing-iconPassed); color: white; }
-    .btn-reject { background: var(--vscode-testing-iconFailed); color: white; }
     .codicon { font-size: 14px; }
   </style>
 </head>
 <body>
   <div id="chat-container"></div>
   <div id="input-area">
-    <input type="text" id="message-input" placeholder="Ask or say 'edit <file> to <instruction>'..." />
+    <input type="text" id="message-input" placeholder="Ask, edit files, or run commands..." />
     <button id="send-btn"><span class="codicon codicon-send"></span> Send</button>
   </div>
   <script>
@@ -390,40 +502,113 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const chatContainer = document.getElementById('chat-container');
     const messageInput = document.getElementById('message-input');
     const sendBtn = document.getElementById('send-btn');
+    let statusBar = null;
 
-    function addMessage(text, type) {
+    function addUserMessage(text) {
       const div = document.createElement('div');
-      div.className = 'message ' + type;
-      div.innerHTML = text;
+      div.className = 'msg msg-user';
+      div.textContent = text;
       chatContainer.appendChild(div);
-      chatContainer.scrollTop = chatContainer.scrollHeight;
+      scrollToBottom();
     }
 
-    function addEditActions() {
+    function addAssistantMessage(html) {
+      removeStatus();
       const div = document.createElement('div');
-      div.className = 'edit-actions';
+      div.className = 'msg msg-assistant';
+      div.innerHTML = html;
+      chatContainer.appendChild(div);
+      scrollToBottom();
+    }
+
+    function setStatus(text) {
+      removeStatus();
+      statusBar = document.createElement('div');
+      statusBar.className = 'status-bar';
+      statusBar.innerHTML = '<span class="codicon codicon-sync"></span> ' + text;
+      chatContainer.appendChild(statusBar);
+      scrollToBottom();
+    }
+
+    function removeStatus() {
+      if (statusBar) { statusBar.remove(); statusBar = null; }
+    }
+
+    function addResultCard(status, title, detail, stdout, stderr, exitCode, durationMs) {
+      removeStatus();
+      const iconMap = { success: 'pass', failure: 'error', error: 'error', rejected: 'close' };
+      const colorMap = { success: 'var(--vscode-testing-iconPassed)', failure: 'var(--vscode-testing-iconFailed)', error: 'var(--vscode-errorForeground)', rejected: 'var(--vscode-descriptionForeground)' };
+      const icon = iconMap[status] || 'info';
+      const color = colorMap[status] || 'inherit';
+
+      const div = document.createElement('div');
+      div.className = 'result-card result-' + status;
+      let html = '<div class="result-title"><span class="codicon codicon-' + icon + '" style="color:' + color + '"></span> ' + title + '</div>';
+      if (detail) html += '<div class="result-detail">' + escapeHtml(detail) + '</div>';
+      div.innerHTML = html;
+      chatContainer.appendChild(div);
+      scrollToBottom();
+    }
+
+    function addCommandCard(command, description, cwd) {
+      removeStatus();
+      const div = document.createElement('div');
+      div.className = 'action-card';
       div.innerHTML =
-        '<button class="btn-diff" onclick="viewDiff()"><span class="codicon codicon-diff"></span> Preview Diff</button>' +
-        '<button class="btn-approve" onclick="approveEdit()"><span class="codicon codicon-check"></span> Approve & Save</button>' +
-        '<button class="btn-reject" onclick="rejectEdit()"><span class="codicon codicon-close"></span> Reject</button>';
+        '<h4><span class="codicon codicon-terminal"></span> Command Ready</h4>' +
+        '<p><strong>Command:</strong> <code>' + escapeHtml(command) + '</code></p>' +
+        '<p><strong>Description:</strong> ' + escapeHtml(description) + '</p>' +
+        '<p><strong>Working dir:</strong> <code>' + escapeHtml(cwd) + '</code></p>' +
+        '<div class="action-bar">' +
+          '<button class="btn-primary" onclick="runCommand()"><span class="codicon codicon-play"></span> Run Command</button>' +
+          '<button class="btn-danger" onclick="rejectCommand()"><span class="codicon codicon-close"></span> Cancel</button>' +
+        '</div>';
       chatContainer.appendChild(div);
+      scrollToBottom();
+    }
+
+    function addEditCard(filePath, instruction, changes) {
+      removeStatus();
+      const div = document.createElement('div');
+      div.className = 'action-card';
+      div.innerHTML =
+        '<h4><span class="codicon codicon-diff"></span> Proposed Edit</h4>' +
+        '<p><strong>File:</strong> <code>' + escapeHtml(filePath) + '</code></p>' +
+        '<p><strong>Instruction:</strong> ' + escapeHtml(instruction) + '</p>' +
+        '<p><strong>Changes:</strong> ' + escapeHtml(changes) + '</p>' +
+        '<div class="action-bar">' +
+          '<button class="btn-secondary" onclick="viewDiff()"><span class="codicon codicon-diff"></span> Preview Diff</button>' +
+          '<button class="btn-success" onclick="approveEdit()"><span class="codicon codicon-check"></span> Approve & Save</button>' +
+          '<button class="btn-danger" onclick="rejectEdit()"><span class="codicon codicon-close"></span> Reject</button>' +
+        '</div>';
+      chatContainer.appendChild(div);
+      scrollToBottom();
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function scrollToBottom() {
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
 
+    function runCommand() { vscode.postMessage({ type: 'runCommand' }); removeLastActionBar(); }
+    function rejectCommand() { vscode.postMessage({ type: 'rejectCommand' }); removeLastActionBar(); }
+    function approveEdit() { vscode.postMessage({ type: 'approveEdit' }); removeLastActionBar(); }
+    function rejectEdit() { vscode.postMessage({ type: 'rejectEdit' }); removeLastActionBar(); }
     function viewDiff() { vscode.postMessage({ type: 'viewDiff' }); }
-    function approveEdit() {
-      vscode.postMessage({ type: 'approveEdit' });
-      document.querySelector('.edit-actions')?.remove();
-    }
-    function rejectEdit() {
-      vscode.postMessage({ type: 'rejectEdit' });
-      document.querySelector('.edit-actions')?.remove();
+
+    function removeLastActionBar() {
+      const bars = document.querySelectorAll('.action-bar');
+      if (bars.length > 0) bars[bars.length - 1].remove();
     }
 
     sendBtn.addEventListener('click', function() {
       const text = messageInput.value.trim();
       if (text) {
-        addMessage(text, 'user');
+        addUserMessage(text);
         vscode.postMessage({ type: 'sendMessage', text: text });
         messageInput.value = '';
       }
@@ -434,14 +619,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     });
 
     window.addEventListener('message', function(event) {
-      const message = event.data;
-      if (message.type === 'response') {
-        addMessage(message.text, 'assistant');
-      } else if (message.type === 'status') {
-        addMessage(message.text, 'status');
-      } else if (message.type === 'edit') {
-        addMessage(message.text, 'edit-preview');
-        addEditActions();
+      const msg = event.data;
+      switch (msg.type) {
+        case 'status':
+          setStatus(msg.text);
+          break;
+        case 'response':
+          addAssistantMessage(msg.text);
+          break;
+        case 'result':
+          addResultCard(msg.status, msg.title, msg.detail, msg.stdout, msg.stderr, msg.exitCode, msg.durationMs);
+          break;
+        case 'command':
+          addCommandCard(msg.command, msg.description, msg.cwd);
+          break;
+        case 'edit':
+          addEditCard(msg.filePath, msg.instruction, msg.changes);
+          break;
       }
     });
   </script>
