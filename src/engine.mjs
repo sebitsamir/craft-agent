@@ -162,7 +162,124 @@ rl.on('line', async (line) => {
         request.params?.patch,
         { allowDirty: request.params?.allowDirty === true },
       );
-    } else if (request.method === 'chat.run') {
+    } else if (request.method === 'pack.film.fix') {
+      const { path: projectPath } = request.params || {};
+      const { inspectFilmProject } = await import('../packs/film/dist/index.js');
+      const { readFile, readdir } = await import('node:fs/promises');
+      const pathModule = await import('node:path');
+
+      // 1. Inspect the project to find missing and available media
+      const report = await inspectFilmProject(projectPath || '.');
+      const allClips = report.clips || [];
+      const missingClips = allClips.filter(c => !c.mediaExists && c.source === 'timeline');
+      const availableClips = allClips.filter(c => c.mediaExists && c.source === 'raw_media');
+
+      if (missingClips.length === 0) {
+        result = { missingClips: [], proposedRelsinks: [], timelinePath: null };
+      } else {
+        // 2. Find the EDL timeline path
+        const edlTimeline = report.timelines.find(t => t.format === 'edl');
+        const timelinePath = edlTimeline ? pathModule.join(projectPath || '.', edlTimeline.path) : null;
+
+        // 3. Use LLM to propose relinks
+        const { provider, model } = selectModelProvider();
+        const router = new CapabilityRouter([provider]);
+        await router.refreshModels();
+
+        const missingList = missingClips.map(c => c.clipName).join('\n');
+        const availableList = availableClips.map(c => c.clipName).join('\n');
+
+        const system = 'You are a film editor assistant. You are given a list of missing media files referenced in an EDL timeline, and a list of available media files on disk. ' +
+          'Match each missing file to the most appropriate available file. ' +
+          'Output ONLY a valid JSON array of objects like: [{"missingFile": "missing.mp4", "availableFile": "existing.mp4"}]. ' +
+          'If there are more missing files than available files, reuse available files as needed. ' +
+          'If there are no available files, return an empty array.';
+
+        const user = 'MISSING MEDIA FILES:\n' + missingList + '\n\nAVAILABLE MEDIA FILES:\n' + availableList;
+
+        const response = await provider.complete({
+          modelId: model || 'qwen/qwen-2.5-72b-instruct',
+          messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+          temperature: 0.1,
+          maxOutputTokens: 512,
+        });
+
+        let cleaned = response.content.trim();
+        if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        else if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+
+        // Extract JSON array
+        const firstBracket = cleaned.indexOf('[');
+        const lastBracket = cleaned.lastIndexOf(']');
+        if (firstBracket !== -1 && lastBracket > firstBracket) {
+          cleaned = cleaned.substring(firstBracket, lastBracket + 1);
+        }
+
+        let proposedRelsinks = [];
+        try {
+          proposedRelsinks = JSON.parse(cleaned);
+        } catch (e) {
+          proposedRelsinks = [];
+        }
+
+        result = {
+          missingClips: missingClips.map(c => ({ clipName: c.clipName, mediaPath: c.mediaPath })),
+          proposedRelsinks,
+          timelinePath,
+        };
+      }
+
+    } else if (request.method === 'pack.film.applyFix') {
+      const { path: projectPath, timelinePath, relinks } = request.params || {};
+      const { readFile, writeFile } = await import('node:fs/promises');
+      const { inspectFilmProject } = await import('../packs/film/dist/index.js');
+
+      if (!timelinePath || !relinks || relinks.length === 0) {
+        throw new Error('Missing timelinePath or relinks');
+      }
+
+      // 1. Read the EDL file
+      let edlContent = await readFile(timelinePath, 'utf8');
+
+      // 2. Create backup
+      const backupPath = timelinePath + '.bak';
+      await writeFile(backupPath, edlContent, 'utf8');
+
+      // 3. Apply relinks
+      let fixedCount = 0;
+      for (const relink of relinks) {
+        if (edlContent.includes(relink.missingFile)) {
+          edlContent = edlContent.replace(relink.missingFile, relink.availableFile);
+          fixedCount++;
+        }
+      }
+
+      // 4. Write the fixed EDL
+      await writeFile(timelinePath, edlContent, 'utf8');
+
+      // 5. Verify by re-inspecting
+      const verifyReport = await inspectFilmProject(projectPath || '.');
+      const stillMissing = (verifyReport.clips || []).filter(c => !c.mediaExists && c.source === 'timeline');
+
+      if (stillMissing.length > 0) {
+        // Verification failed - revert
+        await writeFile(timelinePath, edlContent, 'utf8');
+        result = {
+          success: false,
+          fixedCount,
+          error: 'Verification failed. ' + stillMissing.length + ' media files still missing after patch.',
+          reverted: true,
+        };
+      } else {
+        result = {
+          success: true,
+          fixedCount,
+          error: null,
+          reverted: false,
+        };
+      }
+    }
+    else if (request.method === 'chat.run') {
       const { command, args, cwd } = request.params || {};
       if (!command) throw new Error('Missing command');
 

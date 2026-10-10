@@ -29,7 +29,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private history: ChatMessage[] = [];
   private pendingEdit: PendingEdit | null = null;
   private pendingCommand: PendingCommand | null = null;
-  private pendingEditIsAutoFix: boolean = false; // Guardrail Property
+  private pendingEditIsAutoFix: boolean = false;
+  private pendingFilmFix: { path: string; timelinePath: string; relinks: any[] } | null = null;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -50,9 +51,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       if (data.type === 'sendMessage') {
         await this._handleUserMessage(data.text);
       } else if (data.type === 'approveEdit') {
-        await this._applyPendingEdit();
+        if (this.pendingFilmFix) {
+          await this._applyFilmFix();
+        } else {
+          await this._applyPendingEdit();
+        }
       } else if (data.type === 'rejectEdit') {
         this.pendingEdit = null;
+        this.pendingFilmFix = null;
         this.pendingEditIsAutoFix = false;
         this._postMessage({ type: 'result', status: 'rejected', title: 'Edit Rejected', detail: 'No files were modified.' });
       } else if (data.type === 'viewDiff') {
@@ -197,12 +203,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     if (lower.includes('inspect film') || lower.includes('check media') || lower.includes('verify timeline')) {
       return { domain: 'film', action: 'inspect', path: '.' };
     }
-    if (lower.includes('fix media') || lower.includes('relink media') || lower.includes('fix timeline')) {
+    if (lower.includes('fix film') || lower.includes('fix media') || lower.includes('relink media') || lower.includes('fix timeline')) {
       return { domain: 'film', action: 'fix', path: '.' };
     }
-
-    // FUTURE DOMAINS (Blender, Genomics, etc. will go here)
-    // if (lower.includes('inspect 3d scene')) return { domain: 'blender', action: 'inspect', path: '.' };
 
     return null;
   }
@@ -249,6 +252,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Domain Execution Handler
+  // -------------------------------------------------------------------------
   private async _handleDomainRequest(req: { domain: string; action: string; path: string }) {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '.';
     const targetPath = path.isAbsolute(req.path) ? req.path : path.join(workspaceFolder, req.path);
@@ -258,8 +264,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this._postMessage({ type: 'status', text: 'Inspecting Film Project & Verifying Media Links...' });
         try {
           const report = await this.transport.request('pack.film.inspect', { path: targetPath }) as any;
-
-          // PRODUCTION DEBUG: Log the raw payload from the engine
           this.outputChannel.appendLine('[Chat] Film inspect raw report: ' + JSON.stringify(report, null, 2));
 
           let detail = 'Project: ' + (report.root || targetPath) + '\n';
@@ -291,12 +295,47 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         } catch (e: any) {
           this._postMessage({ type: 'result', status: 'error', title: 'Film Inspection Failed', detail: e.message });
         }
-      }
-      else if (req.action === 'fix') {
-        this._postMessage({ type: 'status', text: 'Generating Film Timeline Patch...' });
-        // This routes to your T2 Film Scoped Patching engine!
-        // The kernel will enforce media immutability and worktree safety automatically.
-        this._postMessage({ type: 'result', status: 'success', title: 'Film Patch Ready', detail: 'The engine is ready to apply the scoped EDL patch via pack.film.applyPatch.' });
+      } else if (req.action === 'fix') {
+        this._postMessage({ type: 'status', text: 'Diagnosing missing media and generating relink patch...' });
+        try {
+          const diagnosis = await this.transport.request('pack.film.fix', { path: targetPath }) as any;
+          this.outputChannel.appendLine('[Chat] Film fix diagnosis: ' + JSON.stringify(diagnosis, null, 2));
+
+          if (!diagnosis.missingClips || diagnosis.missingClips.length === 0) {
+            this._postMessage({
+              type: 'result',
+              status: 'success',
+              title: 'Film Fix: No Missing Media',
+              detail: 'All media references in the timeline are already linked. No fix needed.',
+            });
+            return;
+          }
+
+          let detail = 'Missing Media Detected:\n\n';
+          diagnosis.proposedRelsinks.forEach((r: any) => {
+            detail += '  Missing: ' + r.missingFile + '\n';
+            detail += '  Relink to: ' + r.availableFile + '\n\n';
+          });
+
+          detail += 'This will update the EDL timeline file to point to available media.\n';
+          detail += 'Timeline: ' + diagnosis.timelinePath + '\n';
+
+          this.pendingFilmFix = {
+            path: targetPath,
+            timelinePath: diagnosis.timelinePath,
+            relinks: diagnosis.proposedRelsinks,
+          };
+
+          this._postMessage({
+            type: 'edit',
+            filePath: diagnosis.timelinePath,
+            instruction: 'Relink ' + diagnosis.proposedRelsinks.length + ' missing media files to available assets',
+            changes: diagnosis.proposedRelsinks.length + ' media references will be updated',
+          });
+
+        } catch (e: any) {
+          this._postMessage({ type: 'result', status: 'error', title: 'Film Fix Failed', detail: e.message || String(e) });
+        }
       }
     }
   }
@@ -363,10 +402,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       });
       this.pendingCommand = null;
 
-      // AUTONOMOUS AUTO-FIX: If the command failed, automatically trigger the fix loop
       if (!success && result.stderr) {
         this._postMessage({ type: 'status', text: 'Build failed. Automatically diagnosing and fixing...' });
-        // FIX: Use await with Promise to avoid setTimeout type issues (red underline) in VS Code extensions
         await new Promise(resolve => setTimeout(resolve, 1000));
         this._handleAutoFix(cmd.command + ' ' + cmd.args.join(' '), result.stdout || '', result.stderr || '');
       }
@@ -390,7 +427,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
 
       this._postMessage({ type: 'status', text: 'Found issue in ' + diag.filePath + '. Generating fix...' });
-      // Pass `true` to mark this as an Auto-Fix so the Guardrail activates
       await this._handleEditRequest(diag.filePath, diag.instruction, true);
 
     } catch (e: any) {
@@ -432,13 +468,50 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         instruction: result.instruction,
       };
 
-      // Store the Auto-Fix flag for the Guardrail
       this.pendingEditIsAutoFix = isAutoFix;
 
       const lineDiff = this._countChangedLines(result.originalContent, result.editedContent);
       this._postMessage({ type: 'edit', filePath: filePath, instruction: instruction, changes: lineDiff });
     } catch (error: any) {
       this._postMessage({ type: 'result', status: 'error', title: 'Edit Failed', detail: error.message || String(error) });
+    }
+  }
+
+  private async _applyFilmFix() {
+    if (!this.pendingFilmFix) return;
+
+    this._postMessage({ type: 'status', text: 'Applying EDL relink patch...' });
+    try {
+      const result = await this.transport.request('pack.film.applyFix', {
+        path: this.pendingFilmFix.path,
+        timelinePath: this.pendingFilmFix.timelinePath,
+        relinks: this.pendingFilmFix.relinks,
+      }) as any;
+
+      this.outputChannel.appendLine('[Chat] Film fix result: ' + JSON.stringify(result, null, 2));
+
+      if (result.success) {
+        this._postMessage({
+          type: 'result',
+          status: 'success',
+          title: 'Film Fix Applied and Verified',
+          detail: 'Successfully relinked ' + result.fixedCount + ' media files.\n' +
+                  'Timeline: ' + this.pendingFilmFix.timelinePath + '\n' +
+                  'All media references are now linked.',
+        });
+        this.history.push({ role: 'assistant', content: 'Fixed ' + result.fixedCount + ' missing media links in ' + this.pendingFilmFix.timelinePath });
+      } else {
+        this._postMessage({
+          type: 'result',
+          status: 'failure',
+          title: 'Film Fix Failed Verification',
+          detail: 'The EDL patch was applied but verification failed.\n' + result.error,
+        });
+      }
+      this.pendingFilmFix = null;
+    } catch (e: any) {
+      this._postMessage({ type: 'result', status: 'error', title: 'Film Fix Error', detail: e.message || String(e) });
+      this.pendingFilmFix = null;
     }
   }
 
@@ -489,11 +562,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(this.pendingEdit.filePath));
       await vscode.window.showTextDocument(doc);
 
-      // --- AUTO-REVERT GUARDRAIL ---
       if (isAutoFix) {
         this._postMessage({ type: 'status', text: 'Verifying AI fix by re-running build...' });
 
-        // Automatically run the build again to verify the fix worked
         const verifyResult = await this.transport.request('chat.run', {
           command: 'npm',
           args: ['run', 'build'],
@@ -501,7 +572,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }) as any;
 
         if (verifyResult.exitCode !== 0) {
-          // THE FIX FAILED! Revert to the backup immediately.
           this._postMessage({ type: 'status', text: 'AI fix failed verification. Reverting to backup...' });
           await fs.writeFile(this.pendingEdit.filePath, this.pendingEdit.originalContent, 'utf8');
 
@@ -512,7 +582,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             detail: 'The AI attempted a fix, but the build still failed (exit code ' + verifyResult.exitCode + '). Your file has been safely restored from the .bak backup to prevent code corruption.'
           });
         } else {
-          // THE FIX WORKED!
           this._postMessage({
             type: 'result',
             status: 'success',
